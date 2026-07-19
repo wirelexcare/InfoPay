@@ -24,9 +24,7 @@ export function Layout() {
       <header className="safe-top sticky top-0 z-20 border-b border-border/70 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex w-full max-w-sm items-center justify-between px-4 py-3.5 sm:px-6">
           <Link to="/projects" className="flex items-center gap-2 active:scale-95 transition">
-            <span className="grid h-8 w-8 place-items-center rounded-xl bg-primary text-sm font-bold text-primary-foreground">
-              A
-            </span>
+            <img src="/icon-192.png" alt="AfriHome" className="h-8 w-8 object-contain" />
             <span className="text-base font-bold tracking-tight text-ink-900">
               AfriHome
             </span>

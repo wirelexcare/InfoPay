@@ -124,6 +124,16 @@ export function WalletPage() {
     payCurrency: string;
   } | null>(null);
 
+  const [cryptoQuote, setCryptoQuote] = useState<{
+    ghsPerUsd: number;
+    minDepositGhs: number | null;
+    minWithdrawGhs: number;
+  } | null>(null);
+
+  useEffect(() => {
+    api.get("/api/payments/crypto/quote").then(({ data }) => setCryptoQuote(data));
+  }, []);
+
   const methodsForType = methods.filter((m) => m.type === withdrawType);
 
   function loadWallet() {
@@ -264,6 +274,18 @@ export function WalletPage() {
                   onChange={(e) => setDepositAmount(e.target.value)}
                   placeholder="500"
                 />
+                {depositMethod === "crypto" && cryptoQuote && (
+                  <p className="mt-1 text-xs text-ink-400">
+                    1 USD ≈ GHS {cryptoQuote.ghsPerUsd.toFixed(2)}
+                    {cryptoQuote.minDepositGhs !== null && (
+                      <>
+                        {" "}
+                        · Minimum deposit: GHS{" "}
+                        {cryptoQuote.minDepositGhs.toFixed(2)}
+                      </>
+                    )}
+                  </p>
+                )}
               </div>
               <div>
                 <Label>Method</Label>
@@ -359,6 +381,12 @@ export function WalletPage() {
                     <p className="mt-1 text-xs text-ink-400">
                       Available:{" "}
                       {formatCurrency(convertFromGhs(balance, currency), currency)}
+                      {withdrawType === "crypto" && cryptoQuote && (
+                        <>
+                          {" "}
+                          · Minimum: GHS {cryptoQuote.minWithdrawGhs.toFixed(2)}
+                        </>
+                      )}
                     </p>
                   </div>
                   <div>

@@ -9,9 +9,23 @@ import {
   walletTransactions,
 } from "../db/schema.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
-import { createCryptoPayment, verifyIpnSignature } from "../lib/nowpayments.js";
+import {
+  createCryptoPayment,
+  getCryptoDepositQuote,
+  verifyIpnSignature,
+  CRYPTO_MIN_WITHDRAW_USD,
+} from "../lib/nowpayments.js";
 
 export const paymentsRouter = Router();
+
+paymentsRouter.get("/crypto/quote", requireAuth, async (_req, res) => {
+  const quote = await getCryptoDepositQuote();
+  res.json({
+    ...quote,
+    minWithdrawUsd: CRYPTO_MIN_WITHDRAW_USD,
+    minWithdrawGhs: CRYPTO_MIN_WITHDRAW_USD * quote.ghsPerUsd,
+  });
+});
 
 const initSchema = z.object({
   investmentId: z.string().uuid(),

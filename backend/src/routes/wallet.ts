@@ -14,6 +14,8 @@ import {
   validateBankAccountName,
   getGhanaBanks,
 } from "../lib/moolre.js";
+import { CRYPTO_MIN_WITHDRAW_USD } from "../lib/nowpayments.js";
+import { getGhsPerUsd } from "../lib/fx.js";
 
 export const walletRouter = Router();
 
@@ -175,6 +177,16 @@ walletRouter.post("/withdraw", requireAuth, async (req: AuthedRequest, res) => {
     .limit(1);
   if (!method || method.userId !== userId) {
     return res.status(404).json({ error: "Withdrawal method not found" });
+  }
+
+  if (method.type === "crypto") {
+    const ghsPerUsd = await getGhsPerUsd();
+    const minWithdrawGhs = CRYPTO_MIN_WITHDRAW_USD * ghsPerUsd;
+    if (amount < minWithdrawGhs) {
+      return res.status(400).json({
+        error: `Minimum crypto withdrawal is GHS ${minWithdrawGhs.toFixed(2)}`,
+      });
+    }
   }
 
   const wallet = await getOrCreateWallet(userId);
