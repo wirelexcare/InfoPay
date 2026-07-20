@@ -1,5 +1,5 @@
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
-import { Building2, LayoutDashboard, LogOut, PieChart, Wallet } from "lucide-react";
+import { Building2, LayoutDashboard, LogOut, PieChart, Wallet, Settings } from "lucide-react";
 import { useAuthStore } from "../lib/store";
 import { Toaster } from "./ui/sonner";
 
@@ -30,13 +30,25 @@ export function Layout() {
             </span>
           </Link>
           {user ? (
-            <button
-              onClick={handleLogout}
-              className="grid h-9 w-9 place-items-center rounded-full border border-border text-ink-500 transition active:scale-95 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
-              aria-label="Log out"
-            >
-              <LogOut size={16} />
-            </button>
+            <div className="flex items-center gap-2">
+              {user.role === "admin" && (
+                <Link
+                  to="/admin"
+                  className="grid h-9 w-9 place-items-center rounded-full border border-border text-ink-500 transition active:scale-95 hover:border-primary/20 hover:bg-primary/10 hover:text-primary"
+                  aria-label="Admin panel"
+                  title="Admin Panel"
+                >
+                  <Settings size={16} />
+                </Link>
+              )}
+              <button
+                onClick={handleLogout}
+                className="grid h-9 w-9 place-items-center rounded-full border border-border text-ink-500 transition active:scale-95 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                aria-label="Log out"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
           ) : (
             <div className="flex items-center gap-2">
               <Link
