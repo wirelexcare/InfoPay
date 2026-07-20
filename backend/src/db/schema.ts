@@ -67,6 +67,7 @@ export const users = pgTable("users", {
     .default("GHS"),
   role: userRoleEnum("role").notNull().default("investor"),
   kycStatus: kycStatusEnum("kyc_status").notNull().default("pending"),
+  isSuspended: boolean("is_suspended").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

@@ -2,15 +2,17 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Check, X } from "lucide-react";
 import { toast } from "sonner";
+import { api } from "../lib/api";
 
 interface Withdrawal {
   id: string;
   userId: string;
   amountGhs: string;
-  method: string;
+  method: string | null;
   status: string;
   createdAt: string;
   user?: { email: string; fullName: string };
+  withdrawalMethod?: { accountName: string; accountNumber: string | null } | null;
 }
 
 export function AdminWithdrawalsPage() {
@@ -26,15 +28,8 @@ export function AdminWithdrawalsPage() {
   const fetchPending = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem("accessToken");
-      const res = await fetch("/api/admin/withdrawals/pending", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setWithdrawals(data.data);
-      }
+      const res = await api.get("/api/admin/withdrawals/pending");
+      setWithdrawals(res.data.data);
     } catch (error) {
       console.error("Failed to fetch withdrawals:", error);
       toast.error("Failed to load withdrawals");
@@ -46,18 +41,9 @@ export function AdminWithdrawalsPage() {
   const handleApprove = async (txnId: string) => {
     try {
       setActingOn(txnId);
-      const token = localStorage.getItem("accessToken");
-      const res = await fetch(`/api/admin/withdrawals/${txnId}/approve`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (res.ok) {
-        toast.success("Withdrawal approved");
-        setWithdrawals((prev) => prev.filter((w) => w.id !== txnId));
-      } else {
-        toast.error("Failed to approve");
-      }
+      await api.post(`/api/admin/withdrawals/${txnId}/approve`);
+      toast.success("Withdrawal approved");
+      setWithdrawals((prev) => prev.filter((w) => w.id !== txnId));
     } catch (error) {
       toast.error("Error approving withdrawal");
     } finally {
@@ -68,22 +54,11 @@ export function AdminWithdrawalsPage() {
   const handleReject = async (txnId: string) => {
     try {
       setActingOn(txnId);
-      const token = localStorage.getItem("accessToken");
-      const res = await fetch(`/api/admin/withdrawals/${txnId}/reject`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ reason: "Rejected by admin" }),
+      await api.post(`/api/admin/withdrawals/${txnId}/reject`, {
+        reason: "Rejected by admin",
       });
-
-      if (res.ok) {
-        toast.success("Withdrawal rejected and refunded");
-        setWithdrawals((prev) => prev.filter((w) => w.id !== txnId));
-      } else {
-        toast.error("Failed to reject");
-      }
+      toast.success("Withdrawal rejected and refunded");
+      setWithdrawals((prev) => prev.filter((w) => w.id !== txnId));
     } catch (error) {
       toast.error("Error rejecting withdrawal");
     } finally {
@@ -154,8 +129,15 @@ export function AdminWithdrawalsPage() {
                     <td className="px-6 py-4 font-semibold text-ink-900">
                       ₵{parseFloat(w.amountGhs).toFixed(2)}
                     </td>
-                    <td className="px-6 py-4 text-sm text-ink-700 capitalize">
-                      {w.method || "—"}
+                    <td className="px-6 py-4 text-sm text-ink-700">
+                      <div className="capitalize">{w.method || "—"}</div>
+                      {w.withdrawalMethod && (
+                        <div className="text-xs text-ink-500">
+                          {w.withdrawalMethod.accountName}
+                          {w.withdrawalMethod.accountNumber &&
+                            ` · ${w.withdrawalMethod.accountNumber}`}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-sm text-ink-600">
                       {new Date(w.createdAt).toLocaleDateString()}

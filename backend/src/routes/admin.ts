@@ -24,6 +24,20 @@ export const adminRouter = Router();
 adminRouter.use(requireAuth);
 adminRouter.use(requireAdmin);
 
+// Never leak passwordHash to the admin frontend
+const SAFE_USER_COLUMNS = {
+  id: users.id,
+  email: users.email,
+  fullName: users.fullName,
+  country: users.country,
+  preferredCurrency: users.preferredCurrency,
+  role: users.role,
+  kycStatus: users.kycStatus,
+  isSuspended: users.isSuspended,
+  createdAt: users.createdAt,
+  updatedAt: users.updatedAt,
+};
+
 // Audit log helper
 async function logAdminAction(
   adminId: string,
@@ -69,13 +83,14 @@ adminRouter.get("/users", async (req: AuthedRequest, res) => {
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
     const query = whereClause
-      ? db.select().from(users).where(whereClause)
-      : db.select().from(users);
+      ? db.select(SAFE_USER_COLUMNS).from(users).where(whereClause)
+      : db.select(SAFE_USER_COLUMNS).from(users);
 
     const data = await query.limit(limit).offset(offset);
-    const countResult = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(users);
+    const countQuery = whereClause
+      ? db.select({ count: sql<number>`count(*)` }).from(users).where(whereClause)
+      : db.select({ count: sql<number>`count(*)` }).from(users);
+    const countResult = await countQuery;
     const total = countResult[0]?.count || 0;
 
     res.json({ data, total, page, limit });
@@ -88,7 +103,10 @@ adminRouter.get("/users", async (req: AuthedRequest, res) => {
 adminRouter.get("/users/:userId", async (req: AuthedRequest, res) => {
   try {
     const { userId } = req.params;
-    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    const [user] = await db
+      .select(SAFE_USER_COLUMNS)
+      .from(users)
+      .where(eq(users.id, userId));
 
     if (!user) {
       return res.status(404).json({ error: "User not found" });
@@ -130,7 +148,7 @@ adminRouter.post("/users/:userId/suspend", async (req: AuthedRequest, res) => {
 
     await db
       .update(users)
-      .set({ role: "investor" })
+      .set({ isSuspended: true })
       .where(eq(users.id, userId));
 
     await logAdminAction(
@@ -154,7 +172,7 @@ adminRouter.post("/users/:userId/activate", async (req: AuthedRequest, res) => {
 
     await db
       .update(users)
-      .set({ role: "investor" })
+      .set({ isSuspended: false })
       .where(eq(users.id, userId));
 
     await logAdminAction(req.user!.userId, "ACTIVATE_USER", "users", userId);
@@ -458,14 +476,14 @@ adminRouter.get("/withdrawals/pending", async (req: AuthedRequest, res) => {
     const withUserDetails = await Promise.all(
       data.map(async (txn) => {
         const [user] = await db
-          .select()
+          .select(SAFE_USER_COLUMNS)
           .from(users)
           .where(eq(users.id, txn.userId));
-        const [method] = await db
+        const [withdrawalMethod] = await db
           .select()
           .from(withdrawalMethods)
           .where(eq(withdrawalMethods.userId, txn.userId));
-        return { ...txn, user, method };
+        return { ...txn, user, withdrawalMethod };
       }),
     );
 

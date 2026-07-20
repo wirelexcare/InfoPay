@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
+import { api } from "../lib/api";
 
 interface User {
   id: string;
@@ -24,23 +25,16 @@ export function AdminUsersPage() {
   const fetchUsers = async (p: number) => {
     try {
       setLoading(true);
-      const token = localStorage.getItem("accessToken");
       const params = new URLSearchParams({
         page: p.toString(),
         ...(search && { search }),
         ...(kycFilter && { kycStatus: kycFilter }),
       });
 
-      const res = await fetch(`/api/admin/users?${params}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setUsers(data.data);
-        setTotal(data.total);
-        setPage(p);
-      }
+      const res = await api.get(`/api/admin/users?${params}`);
+      setUsers(res.data.data);
+      setTotal(res.data.total);
+      setPage(p);
     } catch (error) {
       console.error("Failed to fetch users:", error);
       toast.error("Failed to load users");

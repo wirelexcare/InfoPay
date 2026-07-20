@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Check, X } from "lucide-react";
 import { toast } from "sonner";
+import { api } from "../lib/api";
 
 interface KycRecord {
   id: string;
@@ -29,15 +30,8 @@ export function AdminKycPage() {
   const fetchPendingKyc = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem("accessToken");
-      const res = await fetch("/api/admin/kyc/pending", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setKycs(data.data);
-      }
+      const res = await api.get("/api/admin/kyc/pending");
+      setKycs(res.data.data);
     } catch (error) {
       console.error("Failed to fetch KYC:", error);
       toast.error("Failed to load KYC records");
@@ -49,18 +43,9 @@ export function AdminKycPage() {
   const handleApprove = async (kycId: string) => {
     try {
       setActingOnId(kycId);
-      const token = localStorage.getItem("accessToken");
-      const res = await fetch(`/api/admin/kyc/${kycId}/approve`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (res.ok) {
-        toast.success("KYC approved");
-        setKycs((prev) => prev.filter((k) => k.id !== kycId));
-      } else {
-        toast.error("Failed to approve KYC");
-      }
+      await api.post(`/api/admin/kyc/${kycId}/approve`);
+      toast.success("KYC approved");
+      setKycs((prev) => prev.filter((k) => k.id !== kycId));
     } catch (error) {
       console.error("Error:", error);
       toast.error("Error approving KYC");
@@ -72,24 +57,11 @@ export function AdminKycPage() {
   const handleReject = async (kycId: string) => {
     try {
       setActingOnId(kycId);
-      const token = localStorage.getItem("accessToken");
-      const res = await fetch(`/api/admin/kyc/${kycId}/reject`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ reason: rejectReason }),
-      });
-
-      if (res.ok) {
-        toast.success("KYC rejected");
-        setKycs((prev) => prev.filter((k) => k.id !== kycId));
-        setShowRejectModal(null);
-        setRejectReason("");
-      } else {
-        toast.error("Failed to reject KYC");
-      }
+      await api.post(`/api/admin/kyc/${kycId}/reject`, { reason: rejectReason });
+      toast.success("KYC rejected");
+      setKycs((prev) => prev.filter((k) => k.id !== kycId));
+      setShowRejectModal(null);
+      setRejectReason("");
     } catch (error) {
       console.error("Error:", error);
       toast.error("Error rejecting KYC");

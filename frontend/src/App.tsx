@@ -13,6 +13,7 @@ import { WalletPage } from "./pages/WalletPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { AdminPage } from "./pages/AdminPage";
 import { AdminUsersPage } from "./pages/AdminUsersPage";
+import { AdminUserDetailPage } from "./pages/AdminUserDetailPage";
 import { AdminKycPage } from "./pages/AdminKycPage";
 import { AdminProjectsPage } from "./pages/AdminProjectsPage";
 import { AdminFinancialsPage } from "./pages/AdminFinancialsPage";
@@ -97,6 +98,14 @@ export default function App() {
         element={
           <RequireAuth>
             <AdminUsersPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin/users/:userId"
+        element={
+          <RequireAuth>
+            <AdminUserDetailPage />
           </RequireAuth>
         }
       />

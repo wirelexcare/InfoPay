@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../lib/store";
+import { api } from "../lib/api";
 import {
   BarChart3,
   Users,
@@ -32,14 +33,8 @@ export function AdminPage() {
 
     const fetchDashboard = async () => {
       try {
-        const token = localStorage.getItem("accessToken");
-        const res = await fetch("/api/admin/financials/dashboard", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setDashboard(data);
-        }
+        const res = await api.get("/api/admin/financials/dashboard");
+        setDashboard(res.data);
       } catch (error) {
         console.error("Failed to fetch admin dashboard:", error);
       } finally {

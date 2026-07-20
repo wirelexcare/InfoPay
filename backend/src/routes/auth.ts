@@ -106,6 +106,10 @@ authRouter.post("/login", async (req, res) => {
     return res.status(401).json({ error: "Invalid email or password" });
   }
 
+  if (user.isSuspended) {
+    return res.status(403).json({ error: "This account has been suspended" });
+  }
+
   const accessToken = signAccessToken({ userId: user.id, role: user.role });
   const refreshToken = signRefreshToken({ userId: user.id, role: user.role });
 

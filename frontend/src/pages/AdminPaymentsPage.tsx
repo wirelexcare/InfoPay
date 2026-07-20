@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
+import { api } from "../lib/api";
 
 export function AdminPaymentsPage() {
   const navigate = useNavigate();
@@ -10,14 +11,8 @@ export function AdminPaymentsPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const token = localStorage.getItem("accessToken");
-        const res = await fetch("/api/admin/payments/crypto", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setPayments(data.data || []);
-        }
+        const res = await api.get("/api/admin/payments/crypto");
+        setPayments(res.data.data || []);
       } catch (error) {
         console.error("Error:", error);
       } finally {

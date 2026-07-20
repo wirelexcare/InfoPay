@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
+import { api } from "../lib/api";
 
 export function AdminFinancialsPage() {
   const navigate = useNavigate();
@@ -9,11 +10,8 @@ export function AdminFinancialsPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const token = localStorage.getItem("accessToken");
-        const res = await fetch("/api/admin/financials/dashboard", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) setData(await res.json());
+        const res = await api.get("/api/admin/financials/dashboard");
+        setData(res.data);
       } catch (error) {
         console.error("Error:", error);
       }
