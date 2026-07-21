@@ -65,7 +65,7 @@ if (fs.existsSync(frontendDistPath)) {
 }
 
 app.listen(port, () => {
-  console.log(`AfriHome API listening on http://localhost:${port}`);
+  console.log(`InfoPay API listening on http://localhost:${port}`);
 });
 
 // Idempotent per calendar day (see lib/roiAccrual.ts), so an hourly check

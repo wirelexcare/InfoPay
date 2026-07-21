@@ -43,7 +43,7 @@ function minDailyRoi(p: Project): number {
   return Math.round((totalReturn / durationDays) * 100) / 100;
 }
 
-export function ProjectDetailPage() {
+export function PackageDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);

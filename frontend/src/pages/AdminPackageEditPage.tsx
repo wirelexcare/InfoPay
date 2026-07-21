@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, PauseCircle, PlayCircle } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
-import { ProjectForm, type ProjectFormValues } from "../components/ProjectForm";
+import { PackageForm, type PackageFormValues } from "../components/PackageForm";
 
 interface Project extends ProjectFormValues {
   id: string;
@@ -23,49 +23,49 @@ const STATUS_COLOR: Record<Project["fundingStatus"], string> = {
   stopped: "bg-red-50 text-red-700",
 };
 
-export function AdminProjectEditPage() {
-  const { projectId } = useParams();
+export function AdminPackageEditPage() {
+  const { packageId } = useParams();
   const navigate = useNavigate();
-  const [project, setProject] = useState<Project | null>(null);
+  const [package_, setPackage] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [statusUpdating, setStatusUpdating] = useState(false);
 
-  const fetchProject = async () => {
+  const fetchPackage = async () => {
     try {
       setLoading(true);
-      const res = await api.get(`/api/admin/projects/${projectId}`);
+      const res = await api.get(`/api/admin/projects/${packageId}`);
       const data = res.data.data;
-      setProject({
+      setPackage({
         ...data,
         maxInvestmentGhs: data.maxInvestmentGhs ?? "",
         imageUrl: data.imageUrl ?? "",
       });
     } catch (error) {
       console.error("Error:", error);
-      toast.error("Failed to load project");
+      toast.error("Failed to load package");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchProject();
-  }, [projectId]);
+    fetchPackage();
+  }, [packageId]);
 
-  async function handleSave(values: ProjectFormValues) {
+  async function handleSave(values: PackageFormValues) {
     try {
       setSubmitting(true);
-      await api.patch(`/api/admin/projects/${projectId}`, {
+      await api.patch(`/api/admin/projects/${packageId}`, {
         ...values,
         imageUrl: values.imageUrl || undefined,
         maxInvestmentGhs: values.maxInvestmentGhs || undefined,
       });
-      toast.success("Project updated");
-      fetchProject();
+      toast.success("Package updated");
+      fetchPackage();
     } catch (error: any) {
       console.error("Error:", error);
-      toast.error(error.response?.data?.error?.formErrors?.[0] ?? "Failed to update project");
+      toast.error(error.response?.data?.error?.formErrors?.[0] ?? "Failed to update package");
     } finally {
       setSubmitting(false);
     }
@@ -74,12 +74,12 @@ export function AdminProjectEditPage() {
   async function handleSetStatus(status: Project["fundingStatus"]) {
     try {
       setStatusUpdating(true);
-      await api.post(`/api/admin/projects/${projectId}/funding-status`, { status });
+      await api.post(`/api/admin/projects/${packageId}/funding-status`, { status });
       toast.success(`Marked as "${STATUS_LABEL[status]}"`);
-      fetchProject();
+      fetchPackage();
     } catch (error) {
       console.error("Error:", error);
-      toast.error("Failed to update funding status");
+      toast.error("Failed to update package status");
     } finally {
       setStatusUpdating(false);
     }
@@ -96,11 +96,11 @@ export function AdminProjectEditPage() {
     );
   }
 
-  if (!project) {
+  if (!package_) {
     return (
       <div className="min-h-screen bg-background p-6">
         <div className="mx-auto max-w-3xl">
-          <p className="text-ink-600">Project not found.</p>
+          <p className="text-ink-600">Package not found.</p>
         </div>
       </div>
     );
@@ -110,59 +110,51 @@ export function AdminProjectEditPage() {
     <div className="min-h-screen bg-background p-6">
       <div className="mx-auto max-w-3xl">
         <button
-          onClick={() => navigate("/admin/projects")}
+          onClick={() => navigate("/admin/packages")}
           className="mb-6 flex items-center gap-2 text-ink-600 hover:text-ink-900"
         >
           <ArrowLeft size={18} />
-          Back to Projects
+          Back to Packages
         </button>
 
         <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-ink-900">{project.title}</h1>
+          <h1 className="text-2xl font-bold text-ink-900">{package_.title}</h1>
           <span
-            className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUS_COLOR[project.fundingStatus]}`}
+            className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUS_COLOR[package_.fundingStatus]}`}
           >
-            {STATUS_LABEL[project.fundingStatus]}
+            {STATUS_LABEL[package_.fundingStatus]}
           </span>
         </div>
 
         <div className="mb-6 rounded-lg border border-border bg-card p-4">
           <p className="text-sm font-semibold text-ink-700 mb-3">
-            Funding controls
+            Package status
           </p>
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => handleSetStatus("open")}
-              disabled={statusUpdating || project.fundingStatus === "open"}
+              disabled={statusUpdating || package_.fundingStatus === "open"}
               className="flex items-center gap-2 rounded-lg bg-green-50 px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-100 disabled:opacity-40"
             >
               <PlayCircle size={16} />
-              Reopen
-            </button>
-            <button
-              onClick={() => handleSetStatus("target_reached")}
-              disabled={statusUpdating || project.fundingStatus === "target_reached"}
-              className="flex items-center gap-2 rounded-lg bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-40"
-            >
-              <CheckCircle2 size={16} />
-              Mark Target Reached
+              Activate
             </button>
             <button
               onClick={() => handleSetStatus("stopped")}
-              disabled={statusUpdating || project.fundingStatus === "stopped"}
+              disabled={statusUpdating || package_.fundingStatus === "stopped"}
               className="flex items-center gap-2 rounded-lg bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-40"
             >
               <PauseCircle size={16} />
-              Stop Funding
+              Deactivate
             </button>
           </div>
           <p className="mt-3 text-xs text-ink-500">
-            Investors cannot invest unless the project is "Open for investment".
+            Investors can only invest in active packages.
           </p>
         </div>
 
-        <ProjectForm
-          initialValues={project}
+        <PackageForm
+          initialValues={package_}
           submitLabel="Save Changes"
           submitting={submitting}
           onSubmit={handleSave}

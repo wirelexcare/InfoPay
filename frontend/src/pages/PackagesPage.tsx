@@ -36,14 +36,14 @@ const STATUS_COLOR: Record<Project["fundingStatus"], string> = {
   stopped: "bg-ink-100 text-ink-500",
 };
 
-export function ProjectsPage() {
-  const [projects, setProjects] = useState<Project[]>([]);
+export function PackagesPage() {
+  const [packages, setPackages] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     api
       .get("/api/projects")
-      .then(({ data }) => setProjects(data.projects))
+      .then(({ data }) => setPackages(data.projects))
       .finally(() => setLoading(false));
   }, []);
 
@@ -51,10 +51,10 @@ export function ProjectsPage() {
     <div className="space-y-5 py-2 animate-in fade-in-0 duration-300">
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">
-          Projects
+          Investment Packages
         </h1>
         <p className="mt-1 text-sm text-ink-500">
-          Real estate deals open for investment.
+          Choose from our investment packages and start earning daily returns.
         </p>
       </div>
 
@@ -73,7 +73,7 @@ export function ProjectsPage() {
           </div>
           <div>
             <p className="text-sm font-semibold text-ink-700">
-              No active projects yet
+              No investment packages available yet
             </p>
             <p className="text-xs text-ink-400">Check back soon.</p>
           </div>
@@ -81,8 +81,8 @@ export function ProjectsPage() {
       )}
 
       <div className="space-y-3">
-        {projects.map((p) => (
-          <Link key={p.id} to={`/projects/${p.id}`} className="block active:scale-[0.99] transition">
+        {packages.map((p) => (
+          <Link key={p.id} to={`/packages/${p.id}`} className="block active:scale-[0.99] transition">
             <Card className="overflow-hidden transition hover:border-primary/30">
               {p.imageUrl ? (
                 <img

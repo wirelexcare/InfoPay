@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { ImageUpload } from "./ImageUpload";
 
-export interface ProjectFormValues {
+export interface PackageFormValues {
   title: string;
   description: string;
   location: string;
@@ -13,7 +13,7 @@ export interface ProjectFormValues {
   imageUrl: string;
 }
 
-const emptyValues: ProjectFormValues = {
+const emptyValues: PackageFormValues = {
   title: "",
   description: "",
   location: "",
@@ -25,22 +25,22 @@ const emptyValues: ProjectFormValues = {
   imageUrl: "",
 };
 
-interface ProjectFormProps {
-  initialValues?: Partial<ProjectFormValues>;
+interface PackageFormProps {
+  initialValues?: Partial<PackageFormValues>;
   submitLabel: string;
   submitting: boolean;
-  onSubmit: (values: ProjectFormValues) => void;
+  onSubmit: (values: PackageFormValues) => void;
   onCancel?: () => void;
 }
 
-export function ProjectForm({
+export function PackageForm({
   initialValues,
   submitLabel,
   submitting,
   onSubmit,
   onCancel,
-}: ProjectFormProps) {
-  const [form, setForm] = useState<ProjectFormValues>({
+}: PackageFormProps) {
+  const [form, setForm] = useState<PackageFormValues>({
     ...emptyValues,
     ...initialValues,
   });

@@ -103,7 +103,7 @@ export async function createCryptoPayment(
         price_currency: "usd",
         pay_currency: "usdttrc20",
         order_id: `${userId}-${Date.now()}`,
-        order_description: "AfriHome wallet top-up",
+        order_description: "InfoPay wallet top-up",
         ipn_callback_url: callbackUrl,
       }),
     });

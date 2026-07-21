@@ -35,6 +35,6 @@ export const useAuthStore = create<AuthState>()(
       setUser: (user) => set({ user }),
       logout: () => set({ user: null, accessToken: null, refreshToken: null }),
     }),
-    { name: "afrihome-auth" },
+    { name: "infopay-auth" },
   ),
 );

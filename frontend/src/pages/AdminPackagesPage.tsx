@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Plus, X, Search } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
-import { ProjectForm, type ProjectFormValues } from "../components/ProjectForm";
+import { PackageForm, type PackageFormValues } from "../components/PackageForm";
 import { Pagination } from "../components/ui/pagination";
 
 interface Project {
@@ -27,9 +27,9 @@ const STATUS_COLOR: Record<Project["fundingStatus"], string> = {
   stopped: "bg-red-50 text-red-700",
 };
 
-export function AdminProjectsPage() {
+export function AdminPackagesPage() {
   const navigate = useNavigate();
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [packages, setPackages] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -39,7 +39,7 @@ export function AdminProjectsPage() {
   const [total, setTotal] = useState(0);
   const limit = 50;
 
-  const fetchProjects = async (p = 1) => {
+  const fetchPackages = async (p = 1) => {
     try {
       setLoading(true);
       const params = new URLSearchParams({
@@ -48,22 +48,22 @@ export function AdminProjectsPage() {
         ...(search && { search }),
       });
       const res = await api.get(`/api/admin/projects?${params}`);
-      setProjects(res.data.data || []);
+      setPackages(res.data.data || []);
       setTotal(res.data.total || 0);
       setPage(p);
     } catch (error) {
       console.error("Error:", error);
-      toast.error("Failed to load projects");
+      toast.error("Failed to load packages");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchProjects(1);
+    fetchPackages(1);
   }, [search, activeFilter]);
 
-  async function handleCreate(values: ProjectFormValues) {
+  async function handleCreate(values: PackageFormValues) {
     try {
       setSubmitting(true);
       await api.post("/api/admin/projects", {
@@ -71,12 +71,12 @@ export function AdminProjectsPage() {
         imageUrl: values.imageUrl || undefined,
         maxInvestmentGhs: values.maxInvestmentGhs || undefined,
       });
-      toast.success("Project created");
+      toast.success("Package created");
       setShowForm(false);
-      fetchProjects(1);
+      fetchPackages(1);
     } catch (error: any) {
       console.error("Error:", error);
-      toast.error(error.response?.data?.error?.formErrors?.[0] ?? "Failed to create project");
+      toast.error(error.response?.data?.error?.formErrors?.[0] ?? "Failed to create package");
     } finally {
       setSubmitting(false);
     }
@@ -94,20 +94,20 @@ export function AdminProjectsPage() {
         </button>
 
         <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-3xl font-bold">Projects</h1>
+          <h1 className="text-3xl font-bold">Investment Packages</h1>
           <button
             onClick={() => setShowForm((v) => !v)}
             className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground hover:shadow-soft"
           >
             {showForm ? <X size={18} /> : <Plus size={18} />}
-            {showForm ? "Cancel" : "New Project"}
+            {showForm ? "Cancel" : "New Package"}
           </button>
         </div>
 
         {showForm && (
           <div className="mb-6">
-            <ProjectForm
-              submitLabel="Create Project"
+            <PackageForm
+              submitLabel="Create Package"
               submitting={submitting}
               onSubmit={handleCreate}
               onCancel={() => setShowForm(false)}
@@ -156,16 +156,16 @@ export function AdminProjectsPage() {
               <div key={i} className="h-24 bg-ink-100 rounded-lg animate-pulse" />
             ))}
           </div>
-        ) : projects.length === 0 ? (
+        ) : packages.length === 0 ? (
           <div className="rounded-lg border border-border bg-card p-12 text-center">
-            <p className="text-ink-600">No projects yet.</p>
+            <p className="text-ink-600">No packages yet.</p>
           </div>
         ) : (
           <div className="grid gap-4">
-            {projects.map((p) => (
+            {packages.map((p) => (
               <button
                 key={p.id}
-                onClick={() => navigate(`/admin/projects/${p.id}`)}
+                onClick={() => navigate(`/admin/packages/${p.id}`)}
                 className="text-left rounded-lg border border-border bg-card p-4 transition hover:border-primary/50 hover:shadow-soft"
               >
                 <div className="flex items-center justify-between gap-2">
@@ -197,14 +197,14 @@ export function AdminProjectsPage() {
           </div>
         )}
 
-        {!loading && projects.length > 0 && (
+        {!loading && packages.length > 0 && (
           <Pagination
             page={page}
             limit={limit}
             total={total}
-            itemCount={projects.length}
-            onPageChange={fetchProjects}
-            itemLabel="projects"
+            itemCount={packages.length}
+            onPageChange={fetchPackages}
+            itemLabel="packages"
           />
         )}
       </div>

@@ -22,13 +22,12 @@ function addMonths(date: Date, months: number): Date {
 }
 
 /**
- * Credits each active investment's daily share of its project's target
- * return, smoothed evenly across the project duration. This is funded from
- * AfriHome's reserve/treasury rather than tied to a specific realized
- * transaction per project — that's a deliberate business decision to pay
- * a smooth return regardless of the lumpiness of underlying ground
- * operations. Idempotent per calendar day; stops once an investment
- * matures.
+ * Credits each active investment's daily share of its package's target
+ * return, smoothed evenly across the package duration. This is funded from
+ * InfoPay's reserve/treasury rather than tied to a specific realized
+ * transaction per package — that's a deliberate business decision to pay
+ * a smooth return regardless of the lumpiness of underlying operations.
+ * Idempotent per calendar day; stops once an investment matures.
  */
 export async function runDailyRoiAccrual() {
   const activeInvestments = await db

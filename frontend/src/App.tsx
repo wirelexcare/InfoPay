@@ -5,8 +5,8 @@ import { LoginPage } from "./pages/LoginPage";
 import { SignupPage } from "./pages/SignupPage";
 import { KycPage } from "./pages/KycPage";
 import { DashboardPage } from "./pages/DashboardPage";
-import { ProjectsPage } from "./pages/ProjectsPage";
-import { ProjectDetailPage } from "./pages/ProjectDetailPage";
+import { PackagesPage } from "./pages/PackagesPage";
+import { PackageDetailPage } from "./pages/PackageDetailPage";
 import { PortfolioPage } from "./pages/PortfolioPage";
 import { InvestmentDetailPage } from "./pages/InvestmentDetailPage";
 import { WalletPage } from "./pages/WalletPage";
@@ -16,8 +16,8 @@ import { AdminPage } from "./pages/AdminPage";
 import { AdminUsersPage } from "./pages/AdminUsersPage";
 import { AdminUserDetailPage } from "./pages/AdminUserDetailPage";
 import { AdminKycPage } from "./pages/AdminKycPage";
-import { AdminProjectsPage } from "./pages/AdminProjectsPage";
-import { AdminProjectEditPage } from "./pages/AdminProjectEditPage";
+import { AdminPackagesPage } from "./pages/AdminPackagesPage";
+import { AdminPackageEditPage } from "./pages/AdminPackageEditPage";
 import { AdminFinancialsPage } from "./pages/AdminFinancialsPage";
 import { AdminPaymentsPage } from "./pages/AdminPaymentsPage";
 import { AdminPaymentDetailPage } from "./pages/AdminPaymentDetailPage";
@@ -50,8 +50,8 @@ export default function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
-        <Route path="/projects" element={<ProjectsPage />} />
-        <Route path="/projects/:id" element={<ProjectDetailPage />} />
+        <Route path="/packages" element={<PackagesPage />} />
+        <Route path="/packages/:id" element={<PackageDetailPage />} />
         <Route
           path="/kyc"
           element={
@@ -137,18 +137,18 @@ export default function App() {
         }
       />
       <Route
-        path="/admin/projects"
+        path="/admin/packages"
         element={
           <RequireAuth>
-            <AdminProjectsPage />
+            <AdminPackagesPage />
           </RequireAuth>
         }
       />
       <Route
-        path="/admin/projects/:projectId"
+        path="/admin/packages/:packageId"
         element={
           <RequireAuth>
-            <AdminProjectEditPage />
+            <AdminPackageEditPage />
           </RequireAuth>
         }
       />

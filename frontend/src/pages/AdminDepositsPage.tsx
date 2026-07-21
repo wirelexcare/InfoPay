@@ -134,7 +134,7 @@ export function AdminDepositsPage() {
                 value={form.accountName}
                 onChange={(e) => setForm((f) => ({ ...f, accountName: e.target.value }))}
                 className="mt-1 w-full rounded-lg border border-border px-3 py-2"
-                placeholder="AfriHome Ltd"
+                placeholder="InfoPay Ltd"
               />
             </div>
             <div>

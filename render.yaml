@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: afrihome
+    name: infopay
     env: node
     plan: free
     buildCommand: npm run build

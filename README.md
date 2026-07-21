@@ -1,9 +1,8 @@
-# AfriHome
+# InfoPay
 
-Real-estate crowd-investment platform for African markets. Users sign up,
-complete a lightweight KYC check, browse investment projects, and invest in
-GHS-denominated real estate deals — with amounts displayed in their local
-currency.
+Investment platform offering daily ROI through forex, crypto, and real estate.
+Users sign up, complete a lightweight KYC check, browse investment packages, 
+and invest in fixed-return tiers — with amounts displayed in their local currency.
 
 ## Stack
 
