@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
+import { Pagination } from "../components/ui/pagination";
 
 interface KycRecord {
   id: string;
@@ -22,16 +23,21 @@ export function AdminKycPage() {
   const [actingOnId, setActingOnId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectModal, setShowRejectModal] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const limit = 50;
 
   useEffect(() => {
-    fetchPendingKyc();
+    fetchPendingKyc(1);
   }, []);
 
-  const fetchPendingKyc = async () => {
+  const fetchPendingKyc = async (p: number) => {
     try {
       setLoading(true);
-      const res = await api.get("/api/admin/kyc/pending");
+      const res = await api.get(`/api/admin/kyc/pending?page=${p}`);
       setKycs(res.data.data);
+      setTotal(res.data.total);
+      setPage(p);
     } catch (error) {
       console.error("Failed to fetch KYC:", error);
       toast.error("Failed to load KYC records");
@@ -46,6 +52,7 @@ export function AdminKycPage() {
       await api.post(`/api/admin/kyc/${kycId}/approve`);
       toast.success("KYC approved");
       setKycs((prev) => prev.filter((k) => k.id !== kycId));
+      setTotal((t) => t - 1);
     } catch (error) {
       console.error("Error:", error);
       toast.error("Error approving KYC");
@@ -60,6 +67,7 @@ export function AdminKycPage() {
       await api.post(`/api/admin/kyc/${kycId}/reject`, { reason: rejectReason });
       toast.success("KYC rejected");
       setKycs((prev) => prev.filter((k) => k.id !== kycId));
+      setTotal((t) => t - 1);
       setShowRejectModal(null);
       setRejectReason("");
     } catch (error) {
@@ -82,7 +90,7 @@ export function AdminKycPage() {
         </button>
 
         <h1 className="text-3xl font-bold mb-6">
-          Pending KYC Reviews ({kycs.length})
+          Pending KYC Reviews ({total})
         </h1>
 
         {loading ? (
@@ -199,6 +207,17 @@ export function AdminKycPage() {
               </div>
             ))}
           </div>
+        )}
+
+        {!loading && kycs.length > 0 && (
+          <Pagination
+            page={page}
+            limit={limit}
+            total={total}
+            itemCount={kycs.length}
+            onPageChange={fetchPendingKyc}
+            itemLabel="pending KYC reviews"
+          />
         )}
       </div>
     </div>

@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Search } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
+import { Pagination } from "../components/ui/pagination";
 
 interface ConfigRow {
   level: number;
@@ -32,22 +33,37 @@ export function AdminReferralConfigPage() {
   const [rewards, setRewards] = useState<RewardRow[]>([]);
   const [totalRewarded, setTotalRewarded] = useState("0.00");
   const [loading, setLoading] = useState(true);
+  const [rewardsSearch, setRewardsSearch] = useState("");
+  const [rewardsPage, setRewardsPage] = useState(1);
+  const [rewardsTotal, setRewardsTotal] = useState(0);
+  const rewardsLimit = 50;
+
+  const fetchConfig = async () => {
+    const configRes = await api.get("/api/admin/referral-config");
+    setConfig(configRes.data.data);
+    setDrafts(
+      Object.fromEntries(
+        configRes.data.data.map((c: ConfigRow) => [c.level, c.rewardPercentage]),
+      ),
+    );
+  };
+
+  const fetchRewards = async (p: number, search: string) => {
+    const params = new URLSearchParams({
+      page: p.toString(),
+      ...(search && { search }),
+    });
+    const rewardsRes = await api.get(`/api/admin/referral-rewards?${params}`);
+    setRewards(rewardsRes.data.data);
+    setTotalRewarded(rewardsRes.data.totalRewardedGhs);
+    setRewardsTotal(rewardsRes.data.total);
+    setRewardsPage(p);
+  };
 
   const fetchAll = async () => {
     try {
       setLoading(true);
-      const [configRes, rewardsRes] = await Promise.all([
-        api.get("/api/admin/referral-config"),
-        api.get("/api/admin/referral-rewards"),
-      ]);
-      setConfig(configRes.data.data);
-      setDrafts(
-        Object.fromEntries(
-          configRes.data.data.map((c: ConfigRow) => [c.level, c.rewardPercentage]),
-        ),
-      );
-      setRewards(rewardsRes.data.data);
-      setTotalRewarded(rewardsRes.data.totalRewardedGhs);
+      await Promise.all([fetchConfig(), fetchRewards(1, rewardsSearch)]);
     } catch (error) {
       console.error("Error:", error);
       toast.error("Failed to load referral configuration");
@@ -59,6 +75,10 @@ export function AdminReferralConfigPage() {
   useEffect(() => {
     fetchAll();
   }, []);
+
+  useEffect(() => {
+    if (!loading) fetchRewards(1, rewardsSearch);
+  }, [rewardsSearch]);
 
   async function handleSave(level: number) {
     try {
@@ -156,8 +176,18 @@ export function AdminReferralConfigPage() {
 
         <div className="rounded-lg border border-border bg-card p-6">
           <h2 className="text-sm font-bold text-ink-700 uppercase mb-4">
-            Recent Rewards ({rewards.length})
+            Recent Rewards ({rewardsTotal})
           </h2>
+          <div className="relative mb-4">
+            <Search size={16} className="absolute left-3 top-2.5 text-ink-400" />
+            <input
+              type="text"
+              placeholder="Search by referrer or referee email..."
+              value={rewardsSearch}
+              onChange={(e) => setRewardsSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-border bg-background"
+            />
+          </div>
           {rewards.length === 0 ? (
             <p className="text-sm text-ink-600">No referral rewards yet.</p>
           ) : (
@@ -209,6 +239,17 @@ export function AdminReferralConfigPage() {
                 </tbody>
               </table>
             </div>
+          )}
+
+          {rewards.length > 0 && (
+            <Pagination
+              page={rewardsPage}
+              limit={rewardsLimit}
+              total={rewardsTotal}
+              itemCount={rewards.length}
+              onPageChange={(p) => fetchRewards(p, rewardsSearch)}
+              itemLabel="rewards"
+            />
           )}
         </div>
       </div>

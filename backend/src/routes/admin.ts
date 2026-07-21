@@ -92,7 +92,7 @@ adminRouter.get("/users", async (req: AuthedRequest, res) => {
     const search = (req.query.search as string) || "";
     const kycStatus = (req.query.kycStatus as string) || "";
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
-    const limit = 20;
+    const limit = 50;
     const offset = (page - 1) * limit;
 
     const conditions: any[] = [];
@@ -321,7 +321,7 @@ adminRouter.post(
 adminRouter.get("/kyc/pending", async (req: AuthedRequest, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
-    const limit = 20;
+    const limit = 50;
     const offset = (page - 1) * limit;
 
     const data = await db
@@ -417,16 +417,35 @@ adminRouter.post("/kyc/:kycId/reject", requirePermission("kyc.manage"), async (r
 adminRouter.get("/projects", async (req: AuthedRequest, res) => {
   try {
     const isActive = req.query.active !== "false";
+    const search = (req.query.search as string) || "";
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = 50;
+    const offset = (page - 1) * limit;
 
-    const query = db
+    const conditions = [eq(projects.isActive, isActive)];
+    if (search) {
+      const searchPattern = `%${search}%`;
+      conditions.push(
+        or(ilike(projects.title, searchPattern), ilike(projects.location, searchPattern))!,
+      );
+    }
+    const whereClause = and(...conditions);
+
+    const data = await db
       .select()
       .from(projects)
-      .where(eq(projects.isActive, isActive))
-      .orderBy(desc(projects.createdAt));
+      .where(whereClause)
+      .orderBy(desc(projects.createdAt))
+      .limit(limit)
+      .offset(offset);
 
-    const data = await query;
+    const countResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(projects)
+      .where(whereClause);
+    const total = countResult[0]?.count || 0;
 
-    res.json({ data });
+    res.json({ data, total, page, limit });
   } catch (error) {
     console.error("Error fetching projects:", error);
     res.status(500).json({ error: "Failed to fetch projects" });
@@ -666,24 +685,22 @@ adminRouter.get("/payments/crypto", async (req: AuthedRequest, res) => {
   try {
     const status = (req.query.status as string) || "";
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
-    const limit = 20;
+    const limit = 50;
     const offset = (page - 1) * limit;
+    const whereClause = status ? eq(cryptoPayments.status, status) : undefined;
 
-    const query = status
-      ? db
-          .select()
-          .from(cryptoPayments)
-          .where(eq(cryptoPayments.status, status))
-      : db.select().from(cryptoPayments);
-
-    const data = await query
+    const data = await db
+      .select()
+      .from(cryptoPayments)
+      .where(whereClause)
       .orderBy(desc(cryptoPayments.createdAt))
       .limit(limit)
       .offset(offset);
 
     const countResult = await db
       .select({ count: sql<number>`count(*)` })
-      .from(cryptoPayments);
+      .from(cryptoPayments)
+      .where(whereClause);
     const total = countResult[0]?.count || 0;
 
     res.json({ data, total, page, limit });
@@ -736,7 +753,7 @@ adminRouter.get("/payments/crypto/:paymentId", async (req: AuthedRequest, res) =
 adminRouter.get("/withdrawals/pending", async (req: AuthedRequest, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
-    const limit = 20;
+    const limit = 50;
     const offset = (page - 1) * limit;
 
     const data = await db
@@ -952,8 +969,21 @@ adminRouter.get("/roi/investments", async (req: AuthedRequest, res) => {
   try {
     const search = (req.query.search as string) || "";
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
-    const limit = 20;
+    const limit = 50;
     const offset = (page - 1) * limit;
+
+    const conditions = [eq(investments.status, "active")];
+    if (search) {
+      const searchPattern = `%${search}%`;
+      conditions.push(
+        or(
+          ilike(users.email, searchPattern),
+          ilike(users.fullName, searchPattern),
+          ilike(projects.title, searchPattern),
+        )!,
+      );
+    }
+    const whereClause = and(...conditions);
 
     const rows = await db
       .select({
@@ -972,22 +1002,13 @@ adminRouter.get("/roi/investments", async (req: AuthedRequest, res) => {
       .from(investments)
       .innerJoin(projects, eq(projects.id, investments.projectId))
       .innerJoin(users, eq(users.id, investments.userId))
-      .where(eq(investments.status, "active"))
+      .where(whereClause)
       .orderBy(desc(investments.createdAt))
       .limit(limit)
       .offset(offset);
 
-    const filtered = search
-      ? rows.filter(
-          (r) =>
-            r.userEmail.toLowerCase().includes(search.toLowerCase()) ||
-            r.userFullName.toLowerCase().includes(search.toLowerCase()) ||
-            r.projectTitle.toLowerCase().includes(search.toLowerCase()),
-        )
-      : rows;
-
     const data = await Promise.all(
-      filtered.map(async (inv) => {
+      rows.map(async (inv) => {
         const durationDays = Number(inv.durationMonths) * 30;
         const dailyAmount = computeDailyAmount(
           inv.amountGhs,
@@ -1018,8 +1039,10 @@ adminRouter.get("/roi/investments", async (req: AuthedRequest, res) => {
     const countResult = await db
       .select({ count: sql<number>`count(*)` })
       .from(investments)
-      .where(eq(investments.status, "active"));
-    const total = search ? filtered.length : countResult[0]?.count || 0;
+      .innerJoin(projects, eq(projects.id, investments.projectId))
+      .innerJoin(users, eq(users.id, investments.userId))
+      .where(whereClause);
+    const total = countResult[0]?.count || 0;
 
     res.json({ data, total, page, limit });
   } catch (error) {
@@ -1265,12 +1288,21 @@ adminRouter.post(
 
 adminRouter.get("/referral-rewards", async (req: AuthedRequest, res) => {
   try {
+    const search = (req.query.search as string) || "";
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
-    const limit = 30;
+    const limit = 50;
     const offset = (page - 1) * limit;
 
     const referrerUsers = alias(users, "referrer_users");
     const refereeUsers = alias(users, "referee_users");
+
+    const whereClause = search
+      ? or(
+          ilike(referrerUsers.email, `%${search}%`),
+          ilike(refereeUsers.email, `%${search}%`),
+        )
+      : undefined;
+
     const rows = await db
       .select({
         id: referralRewards.id,
@@ -1286,13 +1318,17 @@ adminRouter.get("/referral-rewards", async (req: AuthedRequest, res) => {
       .from(referralRewards)
       .innerJoin(referrerUsers, eq(referrerUsers.id, referralRewards.referrerId))
       .innerJoin(refereeUsers, eq(refereeUsers.id, referralRewards.refereeId))
+      .where(whereClause)
       .orderBy(desc(referralRewards.createdAt))
       .limit(limit)
       .offset(offset);
 
     const countResult = await db
       .select({ count: sql<number>`count(*)` })
-      .from(referralRewards);
+      .from(referralRewards)
+      .innerJoin(referrerUsers, eq(referrerUsers.id, referralRewards.referrerId))
+      .innerJoin(refereeUsers, eq(refereeUsers.id, referralRewards.refereeId))
+      .where(whereClause);
 
     const summaryResult = await db
       .select({ total: sql<string>`COALESCE(SUM(reward_amount_ghs), 0)` })
@@ -1388,7 +1424,7 @@ adminRouter.post(
 adminRouter.get("/manual-deposits/pending", async (req: AuthedRequest, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
-    const limit = 20;
+    const limit = 50;
     const offset = (page - 1) * limit;
 
     const rows = await db
@@ -1647,7 +1683,7 @@ adminRouter.get(
   async (req: AuthedRequest, res) => {
     try {
       const page = Math.max(1, parseInt(req.query.page as string) || 1);
-      const limit = 20;
+      const limit = 50;
       const offset = (page - 1) * limit;
       const status = (req.query.status as string) || "";
 
@@ -1717,7 +1753,7 @@ adminRouter.get(
       }
 
       const page = Math.max(1, parseInt(req.query.page as string) || 1);
-      const limit = 20;
+      const limit = 50;
       const offset = (page - 1) * limit;
 
       const claims = await db

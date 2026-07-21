@@ -2,25 +2,40 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { api } from "../lib/api";
+import { Pagination } from "../components/ui/pagination";
+
+const STATUSES = ["", "waiting", "confirming", "confirmed", "failed", "expired"];
 
 export function AdminPaymentsPage() {
   const navigate = useNavigate();
   const [payments, setPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState("");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const limit = 50;
+
+  const fetchData = async (p: number) => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams({
+        page: p.toString(),
+        ...(status && { status }),
+      });
+      const res = await api.get(`/api/admin/payments/crypto?${params}`);
+      setPayments(res.data.data || []);
+      setTotal(res.data.total || 0);
+      setPage(p);
+    } catch (error) {
+      console.error("Error:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const res = await api.get("/api/admin/payments/crypto");
-        setPayments(res.data.data || []);
-      } catch (error) {
-        console.error("Error:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
+    fetchData(1);
+  }, [status]);
 
   return (
     <div className="min-h-screen bg-background p-6">
@@ -34,6 +49,22 @@ export function AdminPaymentsPage() {
         </button>
 
         <h1 className="text-3xl font-bold mb-6">Crypto Payments</h1>
+
+        <div className="mb-6 flex gap-3 flex-wrap">
+          {STATUSES.map((s) => (
+            <button
+              key={s || "all"}
+              onClick={() => setStatus(s)}
+              className={`px-4 py-2 rounded-lg font-medium capitalize transition ${
+                status === s
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-card border border-border hover:bg-ink-50"
+              }`}
+            >
+              {s || "All"}
+            </button>
+          ))}
+        </div>
 
         {loading ? (
           <div className="space-y-3">
@@ -92,6 +123,23 @@ export function AdminPaymentsPage() {
               </tbody>
             </table>
           </div>
+        )}
+
+        {!loading && payments.length === 0 && (
+          <div className="rounded-lg border border-border bg-card p-8 text-center">
+            <p className="text-ink-600">No payments found</p>
+          </div>
+        )}
+
+        {!loading && (
+          <Pagination
+            page={page}
+            limit={limit}
+            total={total}
+            itemCount={payments.length}
+            onPageChange={fetchData}
+            itemLabel="payments"
+          />
         )}
       </div>
     </div>

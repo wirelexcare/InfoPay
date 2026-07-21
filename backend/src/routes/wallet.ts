@@ -117,15 +117,31 @@ async function getOrCreateWallet(userId: string) {
 
 walletRouter.get("/", requireAuth, async (req: AuthedRequest, res) => {
   const userId = req.user!.userId;
+  const page = Math.max(1, parseInt(req.query.page as string) || 1);
+  const limit = 50;
+  const offset = (page - 1) * limit;
+
   const wallet = await getOrCreateWallet(userId);
   const transactions = await db
     .select()
     .from(walletTransactions)
     .where(eq(walletTransactions.userId, userId))
     .orderBy(desc(walletTransactions.createdAt))
-    .limit(50);
+    .limit(limit)
+    .offset(offset);
 
-  res.json({ wallet, transactions });
+  const countResult = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(walletTransactions)
+    .where(eq(walletTransactions.userId, userId));
+
+  res.json({
+    wallet,
+    transactions,
+    transactionsTotal: countResult[0]?.count || 0,
+    transactionsPage: page,
+    transactionsLimit: limit,
+  });
 });
 
 const depositSchema = z.object({
@@ -609,6 +625,10 @@ walletRouter.get(
   requireAuth,
   async (req: AuthedRequest, res) => {
     try {
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const limit = 50;
+      const offset = (page - 1) * limit;
+
       const claims = await db
         .select({
           id: rewardClaims.id,
@@ -621,9 +641,15 @@ walletRouter.get(
         .innerJoin(rewardPools, eq(rewardPools.id, rewardClaims.poolId))
         .where(eq(rewardClaims.userId, req.user!.userId))
         .orderBy(desc(rewardClaims.claimedAt))
-        .limit(20);
+        .limit(limit)
+        .offset(offset);
 
-      res.json({ claims });
+      const countResult = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(rewardClaims)
+        .where(eq(rewardClaims.userId, req.user!.userId));
+
+      res.json({ claims, total: countResult[0]?.count || 0, page, limit });
     } catch (error) {
       console.error("Error fetching reward history:", error);
       res.status(500).json({ error: "Failed to fetch reward history" });

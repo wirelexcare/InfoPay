@@ -40,29 +40,20 @@ interface DepositSettings {
   accountNumber: string;
 }
 
-interface ManualDeposit {
-  id: string;
-  reference: string;
-  amountGhs: string;
-  network: string;
-  status: "pending" | "approved" | "rejected";
-  rejectionReason: string | null;
-  createdAt: string;
-}
-
-const momoStatusVariant: Record<string, "warning" | "default" | "destructive"> = {
-  pending: "warning",
-  approved: "default",
-  rejected: "destructive",
-};
-
 interface Wallet {
   balanceGhs: string;
 }
 
 interface WalletTransaction {
   id: string;
-  type: "deposit" | "withdrawal" | "investment" | "payout" | "refund";
+  type:
+    | "deposit"
+    | "withdrawal"
+    | "investment"
+    | "payout"
+    | "refund"
+    | "referral_reward"
+    | "reward_claim";
   amountGhs: string;
   balanceBeforeGhs: string;
   balanceAfterGhs: string;
@@ -103,6 +94,8 @@ const typeLabels: Record<string, string> = {
   investment: "Investment",
   payout: "Payout",
   refund: "Refund",
+  referral_reward: "Referral Reward",
+  reward_claim: "Reward Claim",
 };
 
 const typeIcon: Record<string, typeof ArrowDownToLine> = {
@@ -111,41 +104,17 @@ const typeIcon: Record<string, typeof ArrowDownToLine> = {
   investment: Building2,
   payout: TrendingUp,
   refund: RefreshCcw,
+  referral_reward: Gift,
+  reward_claim: Gift,
 };
 
-interface RewardClaim {
-  id: string;
-  poolCode: string;
-  claimedAmountGhs: string;
-  claimedAt: string;
-  claimResult: string;
-}
-
-function RewardsTabContent() {
+function RewardsTabContent({ onClaimed }: { onClaimed: () => void }) {
   const [claimCode, setClaimCode] = useState("");
   const [claiming, setClaiming] = useState(false);
-  const [claimHistory, setClaimHistory] = useState<RewardClaim[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(true);
   const [lastClaimResult, setLastClaimResult] = useState<{
     status: string;
     claimAmount?: number;
   } | null>(null);
-
-  useEffect(() => {
-    fetchHistory();
-  }, []);
-
-  const fetchHistory = async () => {
-    try {
-      setHistoryLoading(true);
-      const res = await api.get("/api/wallet/rewards/history");
-      setClaimHistory(res.data.claims || []);
-    } catch (error) {
-      console.error("Error fetching reward history:", error);
-    } finally {
-      setHistoryLoading(false);
-    }
-  };
 
   const handleClaim = async (e: FormEvent) => {
     e.preventDefault();
@@ -164,7 +133,7 @@ function RewardsTabContent() {
         );
         setLastClaimResult({ status: "success", claimAmount: res.data.claimAmount });
         setClaimCode("");
-        fetchHistory();
+        onClaimed();
       } else {
         const messages: Record<string, string> = {
           pool_not_found: "Reward code not found",
@@ -215,39 +184,10 @@ function RewardsTabContent() {
       {lastClaimResult && lastClaimResult.status === "success" && (
         <Card className="border-green-200 bg-green-50 p-4 text-green-900">
           <p className="text-sm font-medium">
-            ✓ Claimed ₵{lastClaimResult.claimAmount?.toFixed(2)}! Check your wallet.
+            ✓ Claimed ₵{lastClaimResult.claimAmount?.toFixed(2)}! Check your wallet — it'll show up in Recent transactions below.
           </p>
         </Card>
       )}
-
-      <div>
-        <h3 className="mb-3 text-sm font-bold text-ink-700 uppercase">Claim History</h3>
-        {historyLoading ? (
-          <p className="text-sm text-ink-400">Loading history...</p>
-        ) : claimHistory.length === 0 ? (
-          <p className="text-sm text-ink-400">No claims yet. Find reward codes in your community!</p>
-        ) : (
-          <div className="space-y-2">
-            {claimHistory.map((claim) => (
-              <Card key={claim.id} className="flex items-center justify-between px-4 py-3">
-                <div>
-                  <p className="text-sm font-semibold text-ink-900">
-                    Code {claim.poolCode}
-                  </p>
-                  <p className="text-xs text-ink-400">
-                    {new Date(claim.claimedAt).toLocaleDateString()}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold text-green-600">
-                    +₵{parseFloat(claim.claimedAmountGhs).toFixed(2)}
-                  </p>
-                </div>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
@@ -297,7 +237,6 @@ export function WalletPage() {
     api.get("/api/payments/crypto/quote").then(({ data }) => setCryptoQuote(data));
   }, []);
 
-  const [manualDeposits, setManualDeposits] = useState<ManualDeposit[]>([]);
   const [momoSheet, setMomoSheet] = useState<{
     settings: DepositSettings;
     reference: string;
@@ -310,16 +249,6 @@ export function WalletPage() {
     screenshotUrl: "" as string | null,
   });
   const [momoSubmitting, setMomoSubmitting] = useState(false);
-
-  function loadManualDeposits() {
-    return api
-      .get("/api/wallet/manual-deposits")
-      .then(({ data }) => setManualDeposits(data.deposits));
-  }
-
-  useEffect(() => {
-    loadManualDeposits();
-  }, []);
 
   const methodsForType = methods.filter((m) => m.type === withdrawType);
 
@@ -406,7 +335,6 @@ export function WalletPage() {
       toast.success("Submitted — we'll review and credit your wallet shortly");
       setMomoSheet(null);
       setDepositAmount("");
-      await loadManualDeposits();
     } catch (err: any) {
       toast.error(err.response?.data?.error ?? "Failed to submit deposit");
     } finally {
@@ -656,38 +584,10 @@ export function WalletPage() {
 
         <TabsContent value="rewards">
           <Card className="p-4">
-            <RewardsTabContent />
+            <RewardsTabContent onClaimed={loadWallet} />
           </Card>
         </TabsContent>
       </Tabs>
-
-      {manualDeposits.length > 0 && (
-        <div>
-          <h2 className="mb-3 text-sm font-bold text-ink-900">
-            Mobile money deposit requests
-          </h2>
-          <div className="space-y-2">
-            {manualDeposits.map((d) => (
-              <Card key={d.id} className="flex items-center justify-between px-4 py-3">
-                <div>
-                  <p className="text-sm font-semibold text-ink-900">
-                    {formatCurrency(convertFromGhs(Number(d.amountGhs), currency), currency)}
-                  </p>
-                  <p className="text-xs text-ink-400">
-                    Ref {d.reference} · {new Date(d.createdAt).toLocaleDateString()}
-                  </p>
-                  {d.status === "rejected" && d.rejectionReason && (
-                    <p className="mt-0.5 text-xs text-red-600">{d.rejectionReason}</p>
-                  )}
-                </div>
-                <Badge variant={momoStatusVariant[d.status]} className="capitalize">
-                  {d.status}
-                </Badge>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
 
       <div>
         <h2 className="mb-3 text-sm font-bold text-ink-900">

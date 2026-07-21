@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
+import { Pagination } from "../components/ui/pagination";
 
 interface PoolDetail {
   id: string;
@@ -26,6 +27,8 @@ interface PoolDetail {
     claimedAt: string;
   }>;
   claimCount: number;
+  page: number;
+  limit: number;
 }
 
 export function AdminRewardDetailPage() {
@@ -35,13 +38,15 @@ export function AdminRewardDetailPage() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [editExpiresAt, setEditExpiresAt] = useState("");
+  const [claimsPage, setClaimsPage] = useState(1);
 
-  const fetchPool = async () => {
+  const fetchPool = async (p = claimsPage) => {
     try {
       setLoading(true);
-      const res = await api.get(`/api/admin/rewards/pools/${poolId}`);
+      const res = await api.get(`/api/admin/rewards/pools/${poolId}?page=${p}`);
       setPool(res.data.data);
       setEditExpiresAt(res.data.data.expiresAt || "");
+      setClaimsPage(p);
     } catch (error) {
       console.error("Error:", error);
       toast.error("Failed to load reward pool");
@@ -51,7 +56,7 @@ export function AdminRewardDetailPage() {
   };
 
   useEffect(() => {
-    fetchPool();
+    fetchPool(1);
   }, [poolId]);
 
   const handleUpdateStatus = async (newStatus: string) => {
@@ -299,6 +304,17 @@ export function AdminRewardDetailPage() {
                 </div>
               ))}
             </div>
+          )}
+
+          {pool.claims.length > 0 && (
+            <Pagination
+              page={pool.page}
+              limit={pool.limit}
+              total={pool.claimCount}
+              itemCount={pool.claims.length}
+              onPageChange={fetchPool}
+              itemLabel="claims"
+            />
           )}
         </div>
       </div>

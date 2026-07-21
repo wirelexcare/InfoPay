@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
+import { Pagination } from "../components/ui/pagination";
 
 interface RewardPool {
   id: string;
@@ -30,6 +31,9 @@ export function AdminRewardsPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const limit = 50;
 
   const [formData, setFormData] = useState({
     totalPoolGhs: "",
@@ -41,13 +45,15 @@ export function AdminRewardsPage() {
     expiresAt: "",
   });
 
-  const fetchPools = async () => {
+  const fetchPools = async (p = 1) => {
     try {
       setLoading(true);
-      const params = new URLSearchParams();
+      const params = new URLSearchParams({ page: p.toString() });
       if (statusFilter) params.append("status", statusFilter);
       const res = await api.get(`/api/admin/rewards/pools?${params}`);
       setPools(res.data.data || []);
+      setTotal(res.data.total || 0);
+      setPage(p);
     } catch (error) {
       console.error("Error:", error);
       toast.error("Failed to load reward pools");
@@ -57,7 +63,7 @@ export function AdminRewardsPage() {
   };
 
   useEffect(() => {
-    fetchPools();
+    fetchPools(1);
   }, [statusFilter]);
 
   const handleCreatePool = async () => {
@@ -303,7 +309,7 @@ export function AdminRewardsPage() {
         <div className="rounded-lg border border-border bg-card p-6 mb-6">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-sm font-bold text-ink-700 uppercase">
-              Active Pools ({pools.length})
+              Active Pools ({total})
             </h2>
             <select
               value={statusFilter}
@@ -418,6 +424,17 @@ export function AdminRewardsPage() {
                 </tbody>
               </table>
             </div>
+          )}
+
+          {pools.length > 0 && (
+            <Pagination
+              page={page}
+              limit={limit}
+              total={total}
+              itemCount={pools.length}
+              onPageChange={fetchPools}
+              itemLabel="reward pools"
+            />
           )}
         </div>
       </div>

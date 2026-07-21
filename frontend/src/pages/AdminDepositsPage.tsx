@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
+import { Pagination } from "../components/ui/pagination";
 
 interface Settings {
   network: string;
@@ -33,13 +34,16 @@ export function AdminDepositsPage() {
   const [saving, setSaving] = useState(false);
   const [pending, setPending] = useState<PendingDeposit[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const limit = 50;
 
-  const fetchAll = async () => {
+  const fetchAll = async (p = page) => {
     try {
       setLoading(true);
       const [settingsRes, pendingRes] = await Promise.all([
         api.get("/api/admin/deposit-settings"),
-        api.get("/api/admin/manual-deposits/pending"),
+        api.get(`/api/admin/manual-deposits/pending?page=${p}`),
       ]);
       setSettings(settingsRes.data.data);
       if (settingsRes.data.data) {
@@ -50,6 +54,8 @@ export function AdminDepositsPage() {
         });
       }
       setPending(pendingRes.data.data);
+      setTotal(pendingRes.data.total);
+      setPage(p);
     } catch (error) {
       console.error("Error:", error);
       toast.error("Failed to load deposit data");
@@ -59,7 +65,7 @@ export function AdminDepositsPage() {
   };
 
   useEffect(() => {
-    fetchAll();
+    fetchAll(1);
   }, []);
 
   async function handleSaveSettings() {
@@ -158,7 +164,7 @@ export function AdminDepositsPage() {
 
         <div className="rounded-lg border border-border bg-card p-6">
           <h2 className="text-sm font-bold text-ink-700 uppercase mb-4">
-            Pending Review ({pending.length})
+            Pending Review ({total})
           </h2>
           {pending.length === 0 ? (
             <p className="text-sm text-ink-600">No pending deposits.</p>
@@ -210,6 +216,17 @@ export function AdminDepositsPage() {
                 </tbody>
               </table>
             </div>
+          )}
+
+          {pending.length > 0 && (
+            <Pagination
+              page={page}
+              limit={limit}
+              total={total}
+              itemCount={pending.length}
+              onPageChange={fetchAll}
+              itemLabel="pending deposits"
+            />
           )}
         </div>
       </div>

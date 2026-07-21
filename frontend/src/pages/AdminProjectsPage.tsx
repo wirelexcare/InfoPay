@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, X } from "lucide-react";
+import { ArrowLeft, Plus, X, Search } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { ProjectForm, type ProjectFormValues } from "../components/ProjectForm";
+import { Pagination } from "../components/ui/pagination";
 
 interface Project {
   id: string;
@@ -32,12 +33,24 @@ export function AdminProjectsPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [search, setSearch] = useState("");
+  const [activeFilter, setActiveFilter] = useState<"true" | "false">("true");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const limit = 50;
 
-  const fetchProjects = async () => {
+  const fetchProjects = async (p = 1) => {
     try {
       setLoading(true);
-      const res = await api.get("/api/admin/projects");
+      const params = new URLSearchParams({
+        page: p.toString(),
+        active: activeFilter,
+        ...(search && { search }),
+      });
+      const res = await api.get(`/api/admin/projects?${params}`);
       setProjects(res.data.data || []);
+      setTotal(res.data.total || 0);
+      setPage(p);
     } catch (error) {
       console.error("Error:", error);
       toast.error("Failed to load projects");
@@ -47,8 +60,8 @@ export function AdminProjectsPage() {
   };
 
   useEffect(() => {
-    fetchProjects();
-  }, []);
+    fetchProjects(1);
+  }, [search, activeFilter]);
 
   async function handleCreate(values: ProjectFormValues) {
     try {
@@ -60,7 +73,7 @@ export function AdminProjectsPage() {
       });
       toast.success("Project created");
       setShowForm(false);
-      fetchProjects();
+      fetchProjects(1);
     } catch (error: any) {
       console.error("Error:", error);
       toast.error(error.response?.data?.error?.formErrors?.[0] ?? "Failed to create project");
@@ -101,6 +114,41 @@ export function AdminProjectsPage() {
             />
           </div>
         )}
+
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search size={18} className="absolute left-3 top-3 text-ink-400" />
+            <input
+              type="text"
+              placeholder="Search by title or location..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-border bg-background"
+            />
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setActiveFilter("true")}
+              className={`px-4 py-2 rounded-lg font-medium transition ${
+                activeFilter === "true"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-card border border-border hover:bg-ink-50"
+              }`}
+            >
+              Active
+            </button>
+            <button
+              onClick={() => setActiveFilter("false")}
+              className={`px-4 py-2 rounded-lg font-medium transition ${
+                activeFilter === "false"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-card border border-border hover:bg-ink-50"
+              }`}
+            >
+              Inactive
+            </button>
+          </div>
+        </div>
 
         {loading ? (
           <div className="space-y-3">
@@ -147,6 +195,17 @@ export function AdminProjectsPage() {
               </button>
             ))}
           </div>
+        )}
+
+        {!loading && projects.length > 0 && (
+          <Pagination
+            page={page}
+            limit={limit}
+            total={total}
+            itemCount={projects.length}
+            onPageChange={fetchProjects}
+            itemLabel="projects"
+          />
         )}
       </div>
     </div>

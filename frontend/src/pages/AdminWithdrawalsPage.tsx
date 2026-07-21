@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
+import { Pagination } from "../components/ui/pagination";
 
 interface Withdrawal {
   id: string;
@@ -20,16 +21,21 @@ export function AdminWithdrawalsPage() {
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [loading, setLoading] = useState(true);
   const [actingOn, setActingOn] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const limit = 50;
 
   useEffect(() => {
-    fetchPending();
+    fetchPending(1);
   }, []);
 
-  const fetchPending = async () => {
+  const fetchPending = async (p: number) => {
     try {
       setLoading(true);
-      const res = await api.get("/api/admin/withdrawals/pending");
+      const res = await api.get(`/api/admin/withdrawals/pending?page=${p}`);
       setWithdrawals(res.data.data);
+      setTotal(res.data.total);
+      setPage(p);
     } catch (error) {
       console.error("Failed to fetch withdrawals:", error);
       toast.error("Failed to load withdrawals");
@@ -44,6 +50,7 @@ export function AdminWithdrawalsPage() {
       await api.post(`/api/admin/withdrawals/${txnId}/approve`);
       toast.success("Withdrawal approved");
       setWithdrawals((prev) => prev.filter((w) => w.id !== txnId));
+      setTotal((t) => t - 1);
     } catch (error) {
       toast.error("Error approving withdrawal");
     } finally {
@@ -59,6 +66,7 @@ export function AdminWithdrawalsPage() {
       });
       toast.success("Withdrawal rejected and refunded");
       setWithdrawals((prev) => prev.filter((w) => w.id !== txnId));
+      setTotal((t) => t - 1);
     } catch (error) {
       toast.error("Error rejecting withdrawal");
     } finally {
@@ -80,7 +88,7 @@ export function AdminWithdrawalsPage() {
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-3xl font-bold">Pending Withdrawals</h1>
           <div className="rounded-full bg-amber-50 px-4 py-2 font-bold text-amber-700">
-            {withdrawals.length} pending
+            {total} pending
           </div>
         </div>
 
@@ -169,6 +177,17 @@ export function AdminWithdrawalsPage() {
               </tbody>
             </table>
           </div>
+        )}
+
+        {!loading && withdrawals.length > 0 && (
+          <Pagination
+            page={page}
+            limit={limit}
+            total={total}
+            itemCount={withdrawals.length}
+            onPageChange={fetchPending}
+            itemLabel="pending withdrawals"
+          />
         )}
       </div>
     </div>

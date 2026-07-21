@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Search, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
+import { Pagination } from "../components/ui/pagination";
 
 interface User {
   id: string;
@@ -21,6 +22,7 @@ export function AdminUsersPage() {
   const [kycFilter, setKycFilter] = useState("");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const limit = 50;
 
   const fetchUsers = async (p: number) => {
     try {
@@ -186,28 +188,15 @@ export function AdminUsersPage() {
           </div>
         )}
 
-        {!loading && total > 0 && (
-          <div className="mt-6 flex items-center justify-between">
-            <p className="text-sm text-ink-600">
-              Showing {users.length} of {total} users
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => fetchUsers(page - 1)}
-                disabled={page === 1}
-                className="px-4 py-2 rounded-lg border border-border bg-card disabled:opacity-50 hover:bg-ink-50"
-              >
-                Previous
-              </button>
-              <button
-                onClick={() => fetchUsers(page + 1)}
-                disabled={page * 20 >= total}
-                className="px-4 py-2 rounded-lg border border-border bg-card disabled:opacity-50 hover:bg-ink-50"
-              >
-                Next
-              </button>
-            </div>
-          </div>
+        {!loading && (
+          <Pagination
+            page={page}
+            limit={limit}
+            total={total}
+            itemCount={users.length}
+            onPageChange={fetchUsers}
+            itemLabel="users"
+          />
         )}
       </div>
     </div>

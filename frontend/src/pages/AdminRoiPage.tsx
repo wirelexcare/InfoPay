@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Search, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
+import { Pagination } from "../components/ui/pagination";
 
 interface RoiRow {
   id: string;
@@ -24,14 +25,17 @@ export function AdminRoiPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const limit = 50;
 
-  const fetchData = async (q: string) => {
+  const fetchData = async (p: number, q: string) => {
     try {
       setLoading(true);
-      const params = new URLSearchParams({ page: "1", ...(q && { search: q }) });
+      const params = new URLSearchParams({ page: p.toString(), ...(q && { search: q }) });
       const res = await api.get(`/api/admin/roi/investments?${params}`);
       setRows(res.data.data);
       setTotal(res.data.total);
+      setPage(p);
     } catch (error) {
       console.error("Error:", error);
       toast.error("Failed to load ROI reconciliation");
@@ -41,7 +45,7 @@ export function AdminRoiPage() {
   };
 
   useEffect(() => {
-    fetchData(search);
+    fetchData(1, search);
   }, [search]);
 
   const flaggedCount = rows.filter((r) => Math.abs(r.discrepancy) > r.dailyAmount).length;
@@ -152,6 +156,17 @@ export function AdminRoiPage() {
               </tbody>
             </table>
           </div>
+        )}
+
+        {!loading && rows.length > 0 && (
+          <Pagination
+            page={page}
+            limit={limit}
+            total={total}
+            itemCount={rows.length}
+            onPageChange={(p) => fetchData(p, search)}
+            itemLabel="active investments"
+          />
         )}
       </div>
     </div>
