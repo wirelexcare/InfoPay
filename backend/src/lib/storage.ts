@@ -11,8 +11,10 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 const PROJECT_IMAGES_BUCKET = "project-images";
+const PAYMENT_SCREENSHOTS_BUCKET = "payment-screenshots";
 
-export async function uploadProjectImage(
+async function uploadImage(
+  bucket: string,
   buffer: Buffer,
   mimeType: string,
   originalName: string,
@@ -21,13 +23,29 @@ export async function uploadProjectImage(
   const path = `${randomUUID()}.${ext}`;
 
   const { error } = await supabase.storage
-    .from(PROJECT_IMAGES_BUCKET)
+    .from(bucket)
     .upload(path, buffer, { contentType: mimeType, upsert: false });
 
   if (error) {
     throw new Error(`Image upload failed: ${error.message}`);
   }
 
-  const { data } = supabase.storage.from(PROJECT_IMAGES_BUCKET).getPublicUrl(path);
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
   return data.publicUrl;
+}
+
+export async function uploadProjectImage(
+  buffer: Buffer,
+  mimeType: string,
+  originalName: string,
+): Promise<string> {
+  return uploadImage(PROJECT_IMAGES_BUCKET, buffer, mimeType, originalName);
+}
+
+export async function uploadPaymentScreenshot(
+  buffer: Buffer,
+  mimeType: string,
+  originalName: string,
+): Promise<string> {
+  return uploadImage(PAYMENT_SCREENSHOTS_BUCKET, buffer, mimeType, originalName);
 }

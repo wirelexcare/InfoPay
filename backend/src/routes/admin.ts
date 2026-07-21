@@ -19,6 +19,8 @@ import {
   portfolios,
   referralConfig,
   referralRewards,
+  depositSettings,
+  manualDeposits,
 } from "../db/schema.js";
 import {
   requireAuth,
@@ -1305,3 +1307,264 @@ adminRouter.get("/referral-rewards", async (req: AuthedRequest, res) => {
     res.status(500).json({ error: "Failed to fetch referral rewards" });
   }
 });
+
+// ============ MANUAL DEPOSITS ============
+
+adminRouter.get("/deposit-settings", async (_req: AuthedRequest, res) => {
+  try {
+    const [settings] = await db
+      .select({
+        network: depositSettings.network,
+        accountName: depositSettings.accountName,
+        accountNumber: depositSettings.accountNumber,
+        updatedAt: depositSettings.updatedAt,
+        updatedByEmail: users.email,
+      })
+      .from(depositSettings)
+      .leftJoin(users, eq(users.id, depositSettings.updatedBy))
+      .where(eq(depositSettings.key, "momo"))
+      .limit(1);
+
+    res.json({ data: settings ?? null });
+  } catch (error) {
+    console.error("Error fetching deposit settings:", error);
+    res.status(500).json({ error: "Failed to fetch deposit settings" });
+  }
+});
+
+const depositSettingsSchema = z.object({
+  network: z.enum(["mtn", "vodafone", "telecel", "airteltigo"]),
+  accountName: z.string().min(2).max(255),
+  accountNumber: z.string().min(7).max(30),
+});
+
+adminRouter.post(
+  "/deposit-settings",
+  requirePermission("deposits.manage"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const parsed = depositSettingsSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+      }
+
+      const [updated] = await db
+        .insert(depositSettings)
+        .values({
+          key: "momo",
+          ...parsed.data,
+          updatedBy: req.user!.userId,
+        })
+        .onConflictDoUpdate({
+          target: depositSettings.key,
+          set: {
+            ...parsed.data,
+            updatedBy: req.user!.userId,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
+
+      await logAdminAction(
+        req.user!.userId,
+        "DEPOSIT_SETTINGS_UPDATED",
+        "deposit_settings",
+        "momo",
+        parsed.data,
+      );
+
+      res.json({ data: updated });
+    } catch (error) {
+      console.error("Error updating deposit settings:", error);
+      res.status(500).json({ error: "Failed to update deposit settings" });
+    }
+  },
+);
+
+adminRouter.get("/manual-deposits/pending", async (req: AuthedRequest, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = 20;
+    const offset = (page - 1) * limit;
+
+    const rows = await db
+      .select({
+        id: manualDeposits.id,
+        reference: manualDeposits.reference,
+        amountGhs: manualDeposits.amountGhs,
+        network: manualDeposits.network,
+        senderName: manualDeposits.senderName,
+        senderNumber: manualDeposits.senderNumber,
+        createdAt: manualDeposits.createdAt,
+        userEmail: users.email,
+        userFullName: users.fullName,
+      })
+      .from(manualDeposits)
+      .innerJoin(users, eq(users.id, manualDeposits.userId))
+      .where(eq(manualDeposits.status, "pending"))
+      .orderBy(desc(manualDeposits.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    const countResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(manualDeposits)
+      .where(eq(manualDeposits.status, "pending"));
+
+    res.json({ data: rows, total: countResult[0]?.count || 0, page, limit });
+  } catch (error) {
+    console.error("Error fetching pending manual deposits:", error);
+    res.status(500).json({ error: "Failed to fetch pending manual deposits" });
+  }
+});
+
+adminRouter.get("/manual-deposits/:depositId", async (req: AuthedRequest, res) => {
+  try {
+    const [deposit] = await db
+      .select()
+      .from(manualDeposits)
+      .where(eq(manualDeposits.id, req.params.depositId))
+      .limit(1);
+
+    if (!deposit) {
+      return res.status(404).json({ error: "Deposit not found" });
+    }
+
+    const [user] = await db
+      .select(SAFE_USER_COLUMNS)
+      .from(users)
+      .where(eq(users.id, deposit.userId));
+
+    res.json({ data: { ...deposit, user } });
+  } catch (error) {
+    console.error("Error fetching manual deposit:", error);
+    res.status(500).json({ error: "Failed to fetch manual deposit" });
+  }
+});
+
+adminRouter.post(
+  "/manual-deposits/:depositId/approve",
+  requirePermission("deposits.manage"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const { depositId } = req.params;
+      const [deposit] = await db
+        .select()
+        .from(manualDeposits)
+        .where(eq(manualDeposits.id, depositId));
+
+      if (!deposit) {
+        return res.status(404).json({ error: "Deposit not found" });
+      }
+      if (deposit.status !== "pending") {
+        return res.status(400).json({ error: `Deposit is already ${deposit.status}` });
+      }
+
+      const [wallet] = await db
+        .insert(wallets)
+        .values({ userId: deposit.userId })
+        .onConflictDoNothing()
+        .returning();
+      const [currentWallet] =
+        wallet !== undefined
+          ? [wallet]
+          : await db.select().from(wallets).where(eq(wallets.userId, deposit.userId)).limit(1);
+
+      const balanceBefore = Number(currentWallet.balanceGhs);
+      const amount = Number(deposit.amountGhs);
+      const balanceAfter = balanceBefore + amount;
+
+      await db
+        .update(wallets)
+        .set({ balanceGhs: balanceAfter.toFixed(2), updatedAt: new Date() })
+        .where(eq(wallets.userId, deposit.userId));
+
+      await db.insert(walletTransactions).values({
+        userId: deposit.userId,
+        type: "deposit",
+        amountGhs: amount.toFixed(2),
+        balanceBeforeGhs: balanceBefore.toFixed(2),
+        balanceAfterGhs: balanceAfter.toFixed(2),
+        status: "completed",
+        method: "momo",
+        reference: deposit.reference,
+        description: `Manual mobile money deposit (${deposit.network})`,
+      });
+
+      await db
+        .update(manualDeposits)
+        .set({
+          status: "approved",
+          reviewedBy: req.user!.userId,
+          reviewedAt: new Date(),
+        })
+        .where(eq(manualDeposits.id, depositId));
+
+      await logAdminAction(
+        req.user!.userId,
+        "APPROVE_MANUAL_DEPOSIT",
+        "manual_deposits",
+        depositId,
+        { amountGhs: amount, reference: deposit.reference },
+      );
+
+      res.json({ success: true, balanceAfter });
+    } catch (error) {
+      console.error("Error approving manual deposit:", error);
+      res.status(500).json({ error: "Failed to approve manual deposit" });
+    }
+  },
+);
+
+const rejectDepositSchema = z.object({
+  reason: z.string().min(3),
+});
+
+adminRouter.post(
+  "/manual-deposits/:depositId/reject",
+  requirePermission("deposits.manage"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const { depositId } = req.params;
+      const parsed = rejectDepositSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+      }
+
+      const [deposit] = await db
+        .select()
+        .from(manualDeposits)
+        .where(eq(manualDeposits.id, depositId));
+
+      if (!deposit) {
+        return res.status(404).json({ error: "Deposit not found" });
+      }
+      if (deposit.status !== "pending") {
+        return res.status(400).json({ error: `Deposit is already ${deposit.status}` });
+      }
+
+      await db
+        .update(manualDeposits)
+        .set({
+          status: "rejected",
+          rejectionReason: parsed.data.reason,
+          reviewedBy: req.user!.userId,
+          reviewedAt: new Date(),
+        })
+        .where(eq(manualDeposits.id, depositId));
+
+      await logAdminAction(
+        req.user!.userId,
+        "REJECT_MANUAL_DEPOSIT",
+        "manual_deposits",
+        depositId,
+        { reason: parsed.data.reason },
+      );
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error rejecting manual deposit:", error);
+      res.status(500).json({ error: "Failed to reject manual deposit" });
+    }
+  },
+);

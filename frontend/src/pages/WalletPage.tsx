@@ -24,6 +24,7 @@ import { Label } from "../components/ui/label";
 import { Skeleton } from "../components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import { Sheet, SheetContent } from "../components/ui/sheet";
+import { ImageUpload } from "../components/ImageUpload";
 import {
   Select,
   SelectContent,
@@ -31,6 +32,28 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
+
+interface DepositSettings {
+  network: string;
+  accountName: string;
+  accountNumber: string;
+}
+
+interface ManualDeposit {
+  id: string;
+  reference: string;
+  amountGhs: string;
+  network: string;
+  status: "pending" | "approved" | "rejected";
+  rejectionReason: string | null;
+  createdAt: string;
+}
+
+const momoStatusVariant: Record<string, "warning" | "default" | "destructive"> = {
+  pending: "warning",
+  approved: "default",
+  rejected: "destructive",
+};
 
 interface Wallet {
   balanceGhs: string;
@@ -134,6 +157,30 @@ export function WalletPage() {
     api.get("/api/payments/crypto/quote").then(({ data }) => setCryptoQuote(data));
   }, []);
 
+  const [manualDeposits, setManualDeposits] = useState<ManualDeposit[]>([]);
+  const [momoSheet, setMomoSheet] = useState<{
+    settings: DepositSettings;
+    reference: string;
+    amountGhs: string;
+  } | null>(null);
+  const [momoForm, setMomoForm] = useState({
+    network: "mtn" as "mtn" | "vodafone" | "telecel" | "airteltigo",
+    senderName: "",
+    senderNumber: "",
+    screenshotUrl: "" as string | null,
+  });
+  const [momoSubmitting, setMomoSubmitting] = useState(false);
+
+  function loadManualDeposits() {
+    return api
+      .get("/api/wallet/manual-deposits")
+      .then(({ data }) => setManualDeposits(data.deposits));
+  }
+
+  useEffect(() => {
+    loadManualDeposits();
+  }, []);
+
   const methodsForType = methods.filter((m) => m.type === withdrawType);
 
   function loadWallet() {
@@ -176,18 +223,54 @@ export function WalletPage() {
         });
         setDepositAmount("");
       } else {
-        await api.post("/api/wallet/deposit", {
-          amountGhs: depositAmount,
-          method: depositMethod,
+        const [settingsRes, referenceRes] = await Promise.all([
+          api.get("/api/wallet/deposit-settings"),
+          api.get("/api/wallet/manual-deposits/reference"),
+        ]);
+        setMomoForm({
+          network: "mtn",
+          senderName: "",
+          senderNumber: "",
+          screenshotUrl: null,
         });
-        toast.success("Wallet topped up");
-        setDepositAmount("");
-        await loadWallet();
+        setMomoSheet({
+          settings: settingsRes.data.settings,
+          reference: referenceRes.data.reference,
+          amountGhs: depositAmount,
+        });
       }
     } catch (err: any) {
-      toast.error(err.response?.data?.error ?? "Deposit failed");
+      toast.error(err.response?.data?.error ?? "Could not start deposit");
     } finally {
       setDepositLoading(false);
+    }
+  }
+
+  async function handleMomoSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!momoSheet) return;
+    if (!momoForm.screenshotUrl) {
+      toast.error("Please upload your payment screenshot");
+      return;
+    }
+    setMomoSubmitting(true);
+    try {
+      await api.post("/api/wallet/manual-deposits", {
+        reference: momoSheet.reference,
+        amountGhs: momoSheet.amountGhs,
+        network: momoForm.network,
+        senderName: momoForm.senderName,
+        senderNumber: momoForm.senderNumber,
+        screenshotUrl: momoForm.screenshotUrl,
+      });
+      toast.success("Submitted — we'll review and credit your wallet shortly");
+      setMomoSheet(null);
+      setDepositAmount("");
+      await loadManualDeposits();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error ?? "Failed to submit deposit");
+    } finally {
+      setMomoSubmitting(false);
     }
   }
 
@@ -301,6 +384,12 @@ export function WalletPage() {
                     <SelectItem value="crypto">USDT (Crypto)</SelectItem>
                   </SelectContent>
                 </Select>
+                {depositMethod === "momo" && (
+                  <p className="mt-1.5 text-xs text-ink-400">
+                    You'll pay to our mobile money account and upload proof —
+                    your wallet is credited after a quick manual review.
+                  </p>
+                )}
               </div>
               <Button
                 type="submit"
@@ -313,7 +402,7 @@ export function WalletPage() {
                   ? "Processing…"
                   : depositMethod === "crypto"
                     ? "Get deposit address"
-                    : "Top up wallet"}
+                    : "Get payment instructions"}
               </Button>
             </form>
           </Card>
@@ -421,6 +510,34 @@ export function WalletPage() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {manualDeposits.length > 0 && (
+        <div>
+          <h2 className="mb-3 text-sm font-bold text-ink-900">
+            Mobile money deposit requests
+          </h2>
+          <div className="space-y-2">
+            {manualDeposits.map((d) => (
+              <Card key={d.id} className="flex items-center justify-between px-4 py-3">
+                <div>
+                  <p className="text-sm font-semibold text-ink-900">
+                    {formatCurrency(convertFromGhs(Number(d.amountGhs), currency), currency)}
+                  </p>
+                  <p className="text-xs text-ink-400">
+                    Ref {d.reference} · {new Date(d.createdAt).toLocaleDateString()}
+                  </p>
+                  {d.status === "rejected" && d.rejectionReason && (
+                    <p className="mt-0.5 text-xs text-red-600">{d.rejectionReason}</p>
+                  )}
+                </div>
+                <Badge variant={momoStatusVariant[d.status]} className="capitalize">
+                  {d.status}
+                </Badge>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div>
         <h2 className="mb-3 text-sm font-bold text-ink-900">
@@ -600,6 +717,135 @@ export function WalletPage() {
                 Done
               </Button>
             </div>
+          </SheetContent>
+        )}
+      </Sheet>
+
+      <Sheet open={!!momoSheet} onOpenChange={(open) => !open && setMomoSheet(null)}>
+        {momoSheet && (
+          <SheetContent title="Complete your mobile money deposit">
+            <form onSubmit={handleMomoSubmit} className="space-y-4">
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                Pay{" "}
+                <strong>
+                  {formatCurrency(
+                    convertFromGhs(Number(momoSheet.amountGhs), currency),
+                    currency,
+                  )}
+                </strong>{" "}
+                to the account below, using{" "}
+                <strong>{momoSheet.reference}</strong> as the payment
+                reference. Then fill in the details you paid with and upload
+                your screenshot. Your wallet is credited after a quick manual
+                review — usually just a few minutes.
+              </div>
+
+              <Card className="divide-y divide-border p-0">
+                <div className="flex items-center justify-between px-4 py-3 text-sm">
+                  <span className="text-ink-400">Network</span>
+                  <span className="font-medium uppercase text-ink-900">
+                    {momoSheet.settings.network}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3 text-sm">
+                  <span className="text-ink-400">Account name</span>
+                  <span className="font-medium text-ink-900">
+                    {momoSheet.settings.accountName}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3 text-sm">
+                  <span className="text-ink-400">Number</span>
+                  <span className="font-medium text-ink-900">
+                    {momoSheet.settings.accountNumber}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3 text-sm">
+                  <span className="text-ink-400">Reference</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-ink-900">
+                      {momoSheet.reference}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(momoSheet.reference);
+                        toast.success("Reference copied");
+                      }}
+                      className="grid h-6 w-6 place-items-center rounded-full text-ink-400 hover:bg-ink-100 hover:text-ink-900"
+                      aria-label="Copy reference"
+                    >
+                      <Copy size={13} />
+                    </button>
+                  </div>
+                </div>
+              </Card>
+
+              <div>
+                <Label>Network you paid from</Label>
+                <Select
+                  value={momoForm.network}
+                  onValueChange={(v) =>
+                    setMomoForm((f) => ({ ...f, network: v as typeof f.network }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="mtn">MTN</SelectItem>
+                    <SelectItem value="vodafone">Vodafone Cash</SelectItem>
+                    <SelectItem value="telecel">Telecel Cash</SelectItem>
+                    <SelectItem value="airteltigo">AirtelTigo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="senderName">Name on the account you paid with</Label>
+                <Input
+                  id="senderName"
+                  required
+                  value={momoForm.senderName}
+                  onChange={(e) =>
+                    setMomoForm((f) => ({ ...f, senderName: e.target.value }))
+                  }
+                  placeholder="Ama Owusu"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="senderNumber">Number you paid with</Label>
+                <Input
+                  id="senderNumber"
+                  required
+                  value={momoForm.senderNumber}
+                  onChange={(e) =>
+                    setMomoForm((f) => ({ ...f, senderNumber: e.target.value }))
+                  }
+                  placeholder="0240000000"
+                />
+              </div>
+
+              <div>
+                <Label>Payment screenshot</Label>
+                <ImageUpload
+                  value={momoForm.screenshotUrl}
+                  onChange={(url) => setMomoForm((f) => ({ ...f, screenshotUrl: url }))}
+                  endpoint="/api/wallet/manual-deposits/screenshot"
+                  fieldName="screenshot"
+                />
+              </div>
+
+              <Button
+                type="submit"
+                variant="brand"
+                size="lg"
+                disabled={momoSubmitting}
+                className="w-full"
+              >
+                {momoSubmitting ? "Submitting…" : "I've made the payment"}
+              </Button>
+            </form>
           </SheetContent>
         )}
       </Sheet>

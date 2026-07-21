@@ -1,4 +1,5 @@
 import { Router } from "express";
+import multer from "multer";
 import { z } from "zod";
 import { desc, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
@@ -7,6 +8,8 @@ import {
   walletTransactions,
   withdrawalMethods,
   users,
+  depositSettings,
+  manualDeposits,
 } from "../db/schema.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
 import {
@@ -16,8 +19,21 @@ import {
 } from "../lib/moolre.js";
 import { CRYPTO_MIN_WITHDRAW_USD } from "../lib/nowpayments.js";
 import { getGhsPerUsd } from "../lib/fx.js";
+import { generateDepositReference } from "../lib/manualDeposits.js";
+import { uploadPaymentScreenshot } from "../lib/storage.js";
 
 export const walletRouter = Router();
+
+const screenshotUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!file.mimetype.startsWith("image/")) {
+      return cb(new Error("Only image files are allowed"));
+    }
+    cb(null, true);
+  },
+});
 
 const verifyMomoSchema = z.object({
   phoneNumber: z.string().min(7),
@@ -286,5 +302,122 @@ walletRouter.delete(
       .delete(withdrawalMethods)
       .where(eq(withdrawalMethods.id, req.params.id));
     res.status(204).send();
+  },
+);
+
+// ============ MANUAL MOBILE MONEY DEPOSIT ============
+
+walletRouter.get("/deposit-settings", requireAuth, async (_req, res) => {
+  const [settings] = await db
+    .select({
+      network: depositSettings.network,
+      accountName: depositSettings.accountName,
+      accountNumber: depositSettings.accountNumber,
+    })
+    .from(depositSettings)
+    .where(eq(depositSettings.key, "momo"))
+    .limit(1);
+
+  if (!settings) {
+    return res.status(404).json({
+      error: "Manual deposits are not configured yet. Please contact support.",
+    });
+  }
+  res.json({ settings });
+});
+
+walletRouter.get(
+  "/manual-deposits/reference",
+  requireAuth,
+  async (_req: AuthedRequest, res) => {
+    try {
+      const reference = await generateDepositReference();
+      res.json({ reference });
+    } catch (error) {
+      console.error("Error generating deposit reference:", error);
+      res.status(500).json({ error: "Failed to generate deposit reference" });
+    }
+  },
+);
+
+walletRouter.post(
+  "/manual-deposits/screenshot",
+  requireAuth,
+  screenshotUpload.single("screenshot"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file) {
+      return res.status(400).json({ error: "No screenshot file provided" });
+    }
+    try {
+      const url = await uploadPaymentScreenshot(
+        req.file.buffer,
+        req.file.mimetype,
+        req.file.originalname,
+      );
+      res.json({ url });
+    } catch (error) {
+      console.error("Error uploading screenshot:", error);
+      res.status(500).json({ error: "Failed to upload screenshot" });
+    }
+  },
+);
+
+const manualDepositSchema = z.object({
+  reference: z.string().min(3).max(20),
+  amountGhs: z.coerce.number().positive(),
+  network: z.enum(["mtn", "vodafone", "telecel", "airteltigo"]),
+  senderName: z.string().min(2).max(255),
+  senderNumber: z.string().min(7).max(30),
+  screenshotUrl: z.string().url(),
+});
+
+walletRouter.post(
+  "/manual-deposits",
+  requireAuth,
+  async (req: AuthedRequest, res) => {
+    const parsed = manualDepositSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+    const { reference, amountGhs, network, senderName, senderNumber, screenshotUrl } =
+      parsed.data;
+
+    try {
+      const [deposit] = await db
+        .insert(manualDeposits)
+        .values({
+          userId: req.user!.userId,
+          reference,
+          amountGhs: amountGhs.toFixed(2),
+          network,
+          senderName,
+          senderNumber,
+          screenshotUrl,
+        })
+        .returning();
+      res.status(201).json({ deposit });
+    } catch (error: any) {
+      if (error?.code === "23505") {
+        return res.status(409).json({
+          error: "That reference has already been used. Please refresh and try again.",
+        });
+      }
+      console.error("Error creating manual deposit:", error);
+      res.status(500).json({ error: "Failed to submit deposit" });
+    }
+  },
+);
+
+walletRouter.get(
+  "/manual-deposits",
+  requireAuth,
+  async (req: AuthedRequest, res) => {
+    const deposits = await db
+      .select()
+      .from(manualDeposits)
+      .where(eq(manualDeposits.userId, req.user!.userId))
+      .orderBy(desc(manualDeposits.createdAt))
+      .limit(20);
+    res.json({ deposits });
   },
 );

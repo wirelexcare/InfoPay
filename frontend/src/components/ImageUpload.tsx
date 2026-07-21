@@ -6,9 +6,16 @@ import { api } from "../lib/api";
 interface ImageUploadProps {
   value: string | null;
   onChange: (url: string | null) => void;
+  endpoint?: string;
+  fieldName?: string;
 }
 
-export function ImageUpload({ value, onChange }: ImageUploadProps) {
+export function ImageUpload({
+  value,
+  onChange,
+  endpoint = "/api/admin/uploads/image",
+  fieldName = "image",
+}: ImageUploadProps) {
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -24,11 +31,11 @@ export function ImageUpload({ value, onChange }: ImageUploadProps) {
     }
 
     const formData = new FormData();
-    formData.append("image", file);
+    formData.append(fieldName, file);
 
     try {
       setUploading(true);
-      const res = await api.post("/api/admin/uploads/image", formData, {
+      const res = await api.post(endpoint, formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
       onChange(res.data.url);

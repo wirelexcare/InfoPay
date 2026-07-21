@@ -69,6 +69,12 @@ export const referralRewardStatusEnum = pgEnum("referral_reward_status", [
   "reversed",
 ]);
 
+export const manualDepositStatusEnum = pgEnum("manual_deposit_status", [
+  "pending",
+  "approved",
+  "rejected",
+]);
+
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: varchar("email", { length: 255 }).notNull().unique(),
@@ -339,6 +345,39 @@ export const referralConfig = pgTable("referral_config", {
     onDelete: "set null",
   }),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const depositSettings = pgTable("deposit_settings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  key: varchar("key", { length: 30 }).notNull().unique().default("momo"),
+  network: varchar("network", { length: 30 }).notNull(),
+  accountName: varchar("account_name", { length: 255 }).notNull(),
+  accountNumber: varchar("account_number", { length: 30 }).notNull(),
+  updatedBy: uuid("updated_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const manualDeposits = pgTable("manual_deposits", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  reference: varchar("reference", { length: 20 }).notNull().unique(),
+  amountGhs: numeric("amount_ghs", { precision: 14, scale: 2 }).notNull(),
+  network: varchar("network", { length: 30 }).notNull(),
+  senderName: varchar("sender_name", { length: 255 }).notNull(),
+  senderNumber: varchar("sender_number", { length: 30 }).notNull(),
+  screenshotUrl: text("screenshot_url").notNull(),
+  status: manualDepositStatusEnum("status").notNull().default("pending"),
+  rejectionReason: text("rejection_reason"),
+  reviewedBy: uuid("reviewed_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  reviewedAt: timestamp("reviewed_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

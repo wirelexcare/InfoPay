@@ -11,6 +11,7 @@ import {
   LogOut,
   Scale,
   Gift,
+  Smartphone,
 } from "lucide-react";
 
 interface DashboardData {
@@ -96,6 +97,7 @@ export function AdminPage() {
     { label: "Withdrawals", icon: CreditCard, to: "/admin/withdrawals" },
     { label: "ROI Reconciliation", icon: Scale, to: "/admin/roi" },
     { label: "Referral Program", icon: Gift, to: "/admin/referrals" },
+    { label: "Mobile Money Deposits", icon: Smartphone, to: "/admin/deposits" },
   ];
 
   return (
