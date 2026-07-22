@@ -1461,8 +1461,8 @@ adminRouter.get("/referral-rewards", async (req: AuthedRequest, res) => {
 
     const whereClause = search
       ? or(
-          ilike(referrerUsers.email, `%${search}%`),
-          ilike(refereeUsers.email, `%${search}%`),
+          ilike(referrerUsers.phone, `%${search}%`),
+          ilike(refereeUsers.phone, `%${search}%`),
         )
       : undefined;
 
