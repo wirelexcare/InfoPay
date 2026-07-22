@@ -26,7 +26,7 @@ interface ConfigRow {
 interface Referee {
   userId: string;
   fullName: string;
-  email: string;
+  phone: string;
   referredAt: string;
   totalInvestedGhs: string | null;
 }
@@ -90,8 +90,8 @@ export function ReferralDashboardPage() {
     return (
       <div className="space-y-4 py-2">
         <Skeleton className="h-8 w-40 rounded-lg" />
-        <Skeleton className="h-28 rounded-3xl" />
-        <Skeleton className="h-24 rounded-3xl" />
+        <Skeleton className="h-28 rounded-2xl" />
+        <Skeleton className="h-24 rounded-2xl" />
       </div>
     );
   }
@@ -108,22 +108,22 @@ export function ReferralDashboardPage() {
         </p>
       </div>
 
-      <div className="overflow-hidden rounded-3xl bg-ink-900 p-5 text-white shadow-soft-lg">
-        <p className="text-xs font-medium uppercase tracking-wide text-white/60">
+      <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-sky-600 p-5 text-white shadow-soft-lg">
+        <p className="text-xs font-medium uppercase tracking-wide text-white/70">
           Your referral code
         </p>
         <p className="mt-1 text-3xl font-extrabold tracking-widest">{code}</p>
         <div className="mt-4 flex gap-2">
           <button
             onClick={copyCode}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-white/10 py-2.5 text-sm font-semibold transition active:scale-95 hover:bg-white/15"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-white/15 py-2.5 text-sm font-semibold transition active:scale-95 hover:bg-white/25"
           >
             <Copy size={15} />
             Copy code
           </button>
           <button
             onClick={copyLink}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground transition active:scale-95"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-white py-2.5 text-sm font-semibold text-primary transition active:scale-95 hover:bg-white/90"
           >
             <Share2 size={15} />
             Share link
@@ -238,7 +238,7 @@ export function ReferralDashboardPage() {
                   <p className="truncate text-sm font-semibold text-ink-900">
                     {r.fullName}
                   </p>
-                  <p className="truncate text-xs text-ink-400">{r.email}</p>
+                  <p className="truncate text-xs text-ink-400">{r.phone}</p>
                 </div>
                 <div className="shrink-0 text-right">
                   <p className="text-xs font-semibold text-ink-700">

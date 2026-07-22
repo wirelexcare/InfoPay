@@ -7,7 +7,7 @@ import { Pagination } from "../components/ui/pagination";
 
 interface User {
   id: string;
-  email: string;
+  phone: string;
   fullName: string;
   country: string;
   kycStatus: "pending" | "verified" | "rejected";
@@ -77,7 +77,7 @@ export function AdminUsersPage() {
             <Search size={18} className="absolute left-3 top-3 text-ink-400" />
             <input
               type="text"
-              placeholder="Search by email or name..."
+              placeholder="Search by phone or name..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-border bg-background"
@@ -123,7 +123,7 @@ export function AdminUsersPage() {
               <thead>
                 <tr className="border-b border-border bg-ink-50">
                   <th className="px-6 py-3 text-left text-sm font-semibold text-ink-900">
-                    Email
+                    Phone
                   </th>
                   <th className="px-6 py-3 text-left text-sm font-semibold text-ink-900">
                     Name
@@ -150,7 +150,7 @@ export function AdminUsersPage() {
                     onClick={() => handleViewUser(user.id)}
                   >
                     <td className="px-6 py-4 text-sm text-ink-900 font-medium">
-                      {user.email}
+                      {user.phone}
                     </td>
                     <td className="px-6 py-4 text-sm text-ink-700">
                       {user.fullName}

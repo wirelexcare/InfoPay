@@ -1,18 +1,13 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import {
-  ArrowLeft,
-  Building2,
-  Calendar,
-  Coins,
-  TrendingUp,
-} from "lucide-react";
+import { ArrowLeft, Calendar, Coins, TrendingUp } from "lucide-react";
 import { api } from "../lib/api";
 import { useAuthStore } from "../lib/store";
 import { convertFromGhs, formatCurrency } from "../lib/currency";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Skeleton } from "../components/ui/skeleton";
+import { tierStyle, tierTextClasses } from "../lib/tierTheme";
 
 interface Investment {
   id: string;
@@ -25,9 +20,8 @@ interface Investment {
 interface Project {
   id: string;
   title: string;
-  location: string;
   expectedReturnPct: string;
-  durationMonths: string;
+  durationDays: string;
   imageUrl: string | null;
 }
 
@@ -45,9 +39,9 @@ const statusLabels: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
-function addMonths(date: Date, months: number): Date {
+function addDays(date: Date, days: number): Date {
   const result = new Date(date);
-  result.setMonth(result.getMonth() + months);
+  result.setDate(result.getDate() + days);
   return result;
 }
 
@@ -75,9 +69,9 @@ export function InvestmentDetailPage() {
   if (loading) {
     return (
       <div className="space-y-4">
-        <Skeleton className="h-36 rounded-3xl" />
-        <Skeleton className="h-24 rounded-3xl" />
-        <Skeleton className="h-32 rounded-3xl" />
+        <Skeleton className="h-40 rounded-2xl" />
+        <Skeleton className="h-24 rounded-2xl" />
+        <Skeleton className="h-32 rounded-2xl" />
       </div>
     );
   }
@@ -87,14 +81,18 @@ export function InvestmentDetailPage() {
   }
 
   const amount = Number(investment.amountGhs);
-  const durationMonths = Number(project.durationMonths);
-  const durationDays = durationMonths * 30;
+  const durationDays = Number(project.durationDays);
   const estimatedTotalReturn = amount * (Number(project.expectedReturnPct) / 100);
   const estimatedDailyReturn =
     durationDays > 0 ? estimatedTotalReturn / durationDays : 0;
 
   const startDate = new Date(investment.createdAt);
-  const maturityDate = addMonths(startDate, durationMonths);
+  const maturityDate = addDays(startDate, durationDays);
+
+  const { gradient } = tierStyle(project.title);
+  const { main: textMain, muted: textMuted, divider } = tierTextClasses(
+    tierStyle(project.title),
+  );
 
   return (
     <div className="space-y-5 py-2 animate-in fade-in-0 duration-300">
@@ -106,41 +104,25 @@ export function InvestmentDetailPage() {
         Back
       </button>
 
-      {project.imageUrl ? (
-        <img
-          src={project.imageUrl}
-          alt={project.title}
-          className="h-36 w-full rounded-3xl object-cover"
-        />
-      ) : (
-        <div className="grid h-28 w-full place-items-center rounded-3xl bg-gradient-to-br from-accent to-ink-50 text-brand-300">
-          <Building2 size={30} />
-        </div>
-      )}
-
-      <div className="flex items-start justify-between gap-3">
-        <div>
+      <div className={`overflow-hidden rounded-2xl bg-gradient-to-br p-5 shadow-soft-lg ${gradient}`}>
+        <div className="flex items-start justify-between gap-3">
           <Link
-            to={`/projects/${project.id}`}
-            className="text-lg font-extrabold tracking-tight text-ink-900 hover:text-primary"
+            to={`/packages/${project.id}`}
+            className={`text-xs font-bold uppercase tracking-[0.15em] ${textMuted} hover:underline`}
           >
             {project.title}
           </Link>
-          <p className="mt-0.5 text-sm text-ink-500">{project.location}</p>
+          <Badge variant={statusVariant[investment.status] ?? "muted"} className="shrink-0">
+            {statusLabels[investment.status] ?? investment.status}
+          </Badge>
         </div>
-        <Badge variant={statusVariant[investment.status] ?? "muted"} className="shrink-0">
-          {statusLabels[investment.status] ?? investment.status}
-        </Badge>
-      </div>
 
-      <div className="overflow-hidden rounded-3xl bg-ink-900 p-5 text-white shadow-soft-lg">
-        <p className="text-xs font-medium uppercase tracking-wide text-white/60">
-          Amount invested
-        </p>
-        <p className="mt-1 text-3xl font-extrabold tracking-tight">
+        <p className={`mt-3 text-3xl font-extrabold tracking-tight ${textMain}`}>
           {formatCurrency(convertFromGhs(amount, currency), currency)}
         </p>
-        <p className="mt-3 text-xs text-white/50">
+        <p className={`text-xs font-medium ${textMuted}`}>amount invested</p>
+
+        <p className={`mt-4 border-t pt-3 text-xs ${divider} ${textMuted}`}>
           Invested on {startDate.toLocaleDateString()}
         </p>
       </div>
@@ -188,7 +170,7 @@ export function InvestmentDetailPage() {
           </div>
           <div>
             <p className="text-xs text-ink-400">Duration</p>
-            <p className="font-medium text-ink-900">{durationMonths} months</p>
+            <p className="font-medium text-ink-900">{durationDays} days</p>
           </div>
           <div>
             <p className="text-xs text-ink-400">Target total return</p>
@@ -200,7 +182,7 @@ export function InvestmentDetailPage() {
       </Card>
 
       <p className="text-xs leading-relaxed text-ink-400">
-        Daily return is an estimate based on the project's target return
+        Daily return is an estimate based on the package's target return
         spread evenly across its duration — it is not a guaranteed payout.
         "Earned so far" reflects only returns actually paid out to your
         wallet.

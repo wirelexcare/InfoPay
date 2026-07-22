@@ -17,7 +17,7 @@ interface DepositDetail {
   createdAt: string;
   user: {
     id: string;
-    email: string;
+    phone: string;
     fullName: string;
     country: string;
     kycStatus: string;
@@ -162,7 +162,7 @@ export function AdminDepositDetailPage() {
           {deposit.user ? (
             <>
               <Row label="Name" value={deposit.user.fullName} />
-              <Row label="Email" value={deposit.user.email} />
+              <Row label="Phone" value={deposit.user.phone} />
               <Row label="Country" value={deposit.user.country} />
               <Row label="KYC Status" value={deposit.user.kycStatus} />
               <button

@@ -18,7 +18,7 @@ interface WithdrawalDetail {
   createdAt: string;
   user: {
     id: string;
-    email: string;
+    phone: string;
     fullName: string;
     country: string;
     kycStatus: string;
@@ -159,7 +159,7 @@ export function AdminWithdrawalDetailPage() {
           {txn.user ? (
             <>
               <Row label="Name" value={txn.user.fullName} />
-              <Row label="Email" value={txn.user.email} />
+              <Row label="Phone" value={txn.user.phone} />
               <Row label="Country" value={txn.user.country} />
               <Row label="KYC Status" value={txn.user.kycStatus} />
               <button

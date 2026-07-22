@@ -1,48 +1,60 @@
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
-import { Building2, Gift, LayoutDashboard, LogOut, PieChart, Wallet, Settings } from "lucide-react";
+import { Link, NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
+import { Building2, Gift, LayoutDashboard, LogOut, PieChart, Settings } from "lucide-react";
 import { useAuthStore } from "../lib/store";
 import { Toaster } from "./ui/sonner";
 
 const TABS = [
-  { to: "/packages", label: "Investment Packages", icon: Building2 },
-  { to: "/wallet", label: "Wallet", icon: Wallet },
+  { to: "/packages", label: "Packages", icon: Building2 },
+  { to: "/referrals", label: "Refer", icon: Gift },
   { to: "/portfolio", label: "Portfolio", icon: PieChart },
   { to: "/dashboard", label: "Home", icon: LayoutDashboard },
 ];
 
+// Pages that render a full-bleed blue hero behind the header — the header
+// goes transparent and switches to white content on these.
+const HERO_ROUTES = new Set(["/dashboard", "/login", "/signup"]);
+
 export function Layout() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const onHero = HERO_ROUTES.has(pathname);
 
   function handleLogout() {
     logout();
     navigate("/login");
   }
 
+  const iconBtn = onHero
+    ? "border-white/25 text-white hover:bg-white/15"
+    : "border-border text-ink-500 hover:border-primary/20 hover:bg-primary/10 hover:text-primary";
+
   return (
     <div className="min-h-[100dvh] bg-background">
-      <header className="safe-top sticky top-0 z-20 border-b border-border/70 bg-background/80 backdrop-blur-md">
+      <header
+        className={`safe-top fixed inset-x-0 top-0 z-30 transition-colors ${
+          onHero
+            ? "bg-primary"
+            : "border-b border-border/70 bg-background/80 backdrop-blur-md"
+        }`}
+      >
         <div className="mx-auto flex w-full max-w-sm items-center justify-between px-4 py-3.5 sm:px-6">
-          <Link to="/packages" className="flex items-center gap-2 active:scale-95 transition">
+          <Link to={user ? "/dashboard" : "/"} className="flex items-center gap-2 active:scale-95 transition">
             <img src="/icon-192.png" alt="InfoPay" className="h-8 w-8 object-contain" />
-            <span className="text-base font-bold tracking-tight text-ink-900">
+            <span
+              className={`text-base font-bold tracking-tight ${
+                onHero ? "text-white" : "text-ink-900"
+              }`}
+            >
               InfoPay
             </span>
           </Link>
           {user ? (
             <div className="flex items-center gap-2">
-              <Link
-                to="/referrals"
-                className="grid h-9 w-9 place-items-center rounded-full border border-border text-ink-500 transition active:scale-95 hover:border-primary/20 hover:bg-primary/10 hover:text-primary"
-                aria-label="Refer and earn"
-                title="Refer & Earn"
-              >
-                <Gift size={16} />
-              </Link>
               {user.role === "admin" && (
                 <Link
                   to="/admin"
-                  className="grid h-9 w-9 place-items-center rounded-full border border-border text-ink-500 transition active:scale-95 hover:border-primary/20 hover:bg-primary/10 hover:text-primary"
+                  className={`grid h-9 w-9 place-items-center rounded-full border transition active:scale-95 ${iconBtn}`}
                   aria-label="Admin panel"
                   title="Admin Panel"
                 >
@@ -51,7 +63,7 @@ export function Layout() {
               )}
               <button
                 onClick={handleLogout}
-                className="grid h-9 w-9 place-items-center rounded-full border border-border text-ink-500 transition active:scale-95 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                className={`grid h-9 w-9 place-items-center rounded-full border transition active:scale-95 ${iconBtn}`}
                 aria-label="Log out"
               >
                 <LogOut size={16} />
@@ -61,13 +73,19 @@ export function Layout() {
             <div className="flex items-center gap-2">
               <Link
                 to="/login"
-                className="rounded-full px-3 py-1.5 text-sm font-medium text-ink-600 transition hover:text-ink-900"
+                className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
+                  onHero ? "text-white/90 hover:text-white" : "text-ink-600 hover:text-ink-900"
+                }`}
               >
                 Log in
               </Link>
               <Link
                 to="/signup"
-                className="rounded-full bg-ink-900 px-4 py-1.5 text-sm font-semibold text-white transition active:scale-95 hover:bg-ink-800"
+                className={`rounded-full px-4 py-1.5 text-sm font-semibold transition active:scale-95 ${
+                  onHero
+                    ? "bg-white text-primary hover:bg-white/90"
+                    : "bg-ink-900 text-white hover:bg-ink-800"
+                }`}
               >
                 Sign up
               </Link>
@@ -76,19 +94,19 @@ export function Layout() {
         </div>
       </header>
 
-      <main className={`mx-auto w-full max-w-sm px-4 py-5 sm:px-6 ${user ? "pb-28" : "pb-5"}`}>
+      <main className={`mx-auto w-full max-w-sm px-4 pt-16 sm:px-6 ${user ? "pb-28" : "pb-8"}`}>
         <Outlet />
       </main>
 
       {user && (
         <nav className="safe-bottom fixed inset-x-0 bottom-0 z-20 px-4 pb-3">
-          <div className="mx-auto flex w-full max-w-sm items-center justify-around gap-1 rounded-[1.75rem] border border-border/70 bg-card/90 p-1.5 shadow-soft-lg backdrop-blur-md">
+          <div className="mx-auto flex w-full max-w-sm items-center justify-around gap-1 rounded-2xl border border-border/70 bg-card/90 p-1.5 shadow-soft-lg backdrop-blur-md">
             {TABS.map(({ to, label, icon: Icon }) => (
               <NavLink
                 key={to}
                 to={to}
                 className={({ isActive }) =>
-                  `flex flex-1 flex-col items-center gap-0.5 rounded-2xl px-2 py-2 text-[11px] font-semibold transition active:scale-95 ${
+                  `flex flex-1 flex-col items-center gap-0.5 rounded-xl px-2 py-2 text-[11px] font-semibold transition active:scale-95 ${
                     isActive
                       ? "bg-primary text-primary-foreground shadow-soft"
                       : "text-ink-400 hover:text-ink-600"

@@ -2,46 +2,31 @@ import "dotenv/config";
 import { db } from "./index.js";
 import { projects } from "./schema.js";
 
-const SAMPLE_PROJECTS = [
-  {
-    title: "Airport Hills Residences",
-    description:
-      "A gated residential development of 24 three-bedroom townhouses near Kotoka International Airport, Accra. Pre-sales are underway with 60% of units reserved.",
-    location: "Accra, Ghana",
-    targetAmountGhs: "4800000",
-    raisedAmountGhs: "1920000",
-    minInvestmentGhs: "5000",
-    expectedReturnPct: "18.5",
-    durationMonths: "18",
-  },
-  {
-    title: "Kumasi Central Retail Plaza",
-    description:
-      "Mixed-use retail and office complex in central Kumasi, anchored by two supermarket tenants on 15-year leases.",
-    location: "Kumasi, Ghana",
-    targetAmountGhs: "6200000",
-    raisedAmountGhs: "3100000",
-    minInvestmentGhs: "10000",
-    expectedReturnPct: "16",
-    durationMonths: "24",
-  },
-  {
-    title: "Takoradi Harbor View Apartments",
-    description:
-      "48-unit mid-market apartment block serving the growing oil & gas workforce in Takoradi, with on-site parking and backup power.",
-    location: "Takoradi, Ghana",
-    targetAmountGhs: "3500000",
-    raisedAmountGhs: "700000",
-    minInvestmentGhs: "3000",
-    expectedReturnPct: "14.5",
-    durationMonths: "12",
-  },
+const TIER_PACKAGES = [
+  { title: "Standard", minInvestmentGhs: "50", expectedReturnPct: "15", durationDays: "14" },
+  { title: "Bronze", minInvestmentGhs: "150", expectedReturnPct: "18", durationDays: "21" },
+  { title: "Silver", minInvestmentGhs: "400", expectedReturnPct: "20", durationDays: "30" },
+  { title: "Gold", minInvestmentGhs: "1000", expectedReturnPct: "25", durationDays: "30" },
+  { title: "Platinum", minInvestmentGhs: "2500", expectedReturnPct: "28", durationDays: "45" },
+  { title: "Diamond", minInvestmentGhs: "5000", expectedReturnPct: "32", durationDays: "60" },
+  { title: "Master", minInvestmentGhs: "10000", expectedReturnPct: "35", durationDays: "60" },
+  { title: "Grandmaster", minInvestmentGhs: "25000", expectedReturnPct: "38", durationDays: "90" },
+  { title: "Challenger", minInvestmentGhs: "50000", expectedReturnPct: "42", durationDays: "90" },
+  { title: "Legend", minInvestmentGhs: "100000", expectedReturnPct: "50", durationDays: "120" },
 ];
 
 async function seed() {
-  for (const project of SAMPLE_PROJECTS) {
-    await db.insert(projects).values(project);
-    console.log(`Inserted: ${project.title}`);
+  for (const tier of TIER_PACKAGES) {
+    await db.insert(projects).values({
+      title: tier.title,
+      description: "",
+      location: "",
+      targetAmountGhs: tier.minInvestmentGhs,
+      minInvestmentGhs: tier.minInvestmentGhs,
+      expectedReturnPct: tier.expectedReturnPct,
+      durationDays: tier.durationDays,
+    });
+    console.log(`Inserted: ${tier.title}`);
   }
   console.log("Seed complete.");
   process.exit(0);

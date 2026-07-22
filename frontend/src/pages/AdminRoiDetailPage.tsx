@@ -21,8 +21,8 @@ interface RoiDetail {
   createdAt: string;
   projectTitle: string;
   expectedReturnPct: string;
-  durationMonths: string;
-  user: { id: string; fullName: string; email: string } | null;
+  durationDays: string;
+  user: { id: string; fullName: string; phone: string } | null;
   dailyAmount: number;
   expectedPaid: number;
   paidSoFar: number;
@@ -121,7 +121,7 @@ export function AdminRoiDetailPage() {
         <h1 className="text-2xl font-bold text-ink-900 mb-1">{data.projectTitle}</h1>
         {data.user && (
           <p className="text-sm text-ink-500 mb-6">
-            {data.user.fullName} · {data.user.email}
+            {data.user.fullName} · {data.user.phone}
           </p>
         )}
 
@@ -131,7 +131,7 @@ export function AdminRoiDetailPage() {
           </h2>
           <Row label="Invested" value={`₵${parseFloat(data.amountGhs).toFixed(2)}`} />
           <Row label="Expected Return" value={`${data.expectedReturnPct}%`} />
-          <Row label="Duration" value={`${data.durationMonths} months`} />
+          <Row label="Duration" value={`${data.durationDays} days`} />
           <Row label="Daily ROI" value={`₵${data.dailyAmount.toFixed(2)}`} />
           <Row label="Expected Paid to Date" value={`₵${data.expectedPaid.toFixed(2)}`} />
           <Row label="Actually Paid" value={`₵${data.paidSoFar.toFixed(2)}`} />

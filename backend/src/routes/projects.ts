@@ -1,24 +1,20 @@
 import { Router } from "express";
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { projects } from "../db/schema.js";
 
 export const projectsRouter = Router();
 
-// Investor-facing columns: raisedAmountGhs/targetAmountGhs are deliberately
-// excluded — fundraising progress is admin-only, investors only see whether
-// a project is open for investment via fundingStatus.
+// Each package has one fixed investment amount — no crowdfunding target,
+// no raised total, no min/max range. minInvestmentGhs holds that fixed amount.
 const PUBLIC_PROJECT_COLUMNS = {
   id: projects.id,
   title: projects.title,
   description: projects.description,
-  location: projects.location,
-  minInvestmentGhs: projects.minInvestmentGhs,
-  maxInvestmentGhs: projects.maxInvestmentGhs,
+  amountGhs: projects.minInvestmentGhs,
   expectedReturnPct: projects.expectedReturnPct,
-  durationMonths: projects.durationMonths,
+  durationDays: projects.durationDays,
   imageUrl: projects.imageUrl,
-  fundingStatus: projects.fundingStatus,
   createdAt: projects.createdAt,
 };
 
@@ -26,7 +22,8 @@ projectsRouter.get("/", async (_req, res) => {
   const list = await db
     .select(PUBLIC_PROJECT_COLUMNS)
     .from(projects)
-    .where(eq(projects.isActive, true));
+    .where(eq(projects.isActive, true))
+    .orderBy(asc(projects.minInvestmentGhs));
   res.json({ projects: list });
 });
 

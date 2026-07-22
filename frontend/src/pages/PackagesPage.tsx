@@ -1,43 +1,28 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Building2, MapPin, TrendingUp } from "lucide-react";
+import { Package as PackageIcon } from "lucide-react";
 import { api } from "../lib/api";
-import { Card } from "../components/ui/card";
-import { Badge } from "../components/ui/badge";
 import { Skeleton } from "../components/ui/skeleton";
+import { tierStyle, tierTextClasses } from "../lib/tierTheme";
 
-interface Project {
+interface Package {
   id: string;
   title: string;
-  location: string;
-  minInvestmentGhs: string;
+  amountGhs: string;
   expectedReturnPct: string;
-  durationMonths: string;
+  durationDays: string;
   imageUrl: string | null;
-  fundingStatus: "open" | "target_reached" | "stopped";
 }
 
-function minDailyRoi(p: Project): number {
-  const totalReturn = Number(p.minInvestmentGhs) * (Number(p.expectedReturnPct) / 100);
-  const durationDays = Number(p.durationMonths) * 30;
+function dailyRoi(p: Package): number {
+  const totalReturn = Number(p.amountGhs) * (Number(p.expectedReturnPct) / 100);
+  const durationDays = Number(p.durationDays);
   if (durationDays <= 0) return 0;
   return Math.round((totalReturn / durationDays) * 100) / 100;
 }
 
-const STATUS_LABEL: Record<Project["fundingStatus"], string> = {
-  open: "Open for investment",
-  target_reached: "Fully funded",
-  stopped: "Closed",
-};
-
-const STATUS_COLOR: Record<Project["fundingStatus"], string> = {
-  open: "bg-green-50 text-green-700",
-  target_reached: "bg-blue-50 text-blue-700",
-  stopped: "bg-ink-100 text-ink-500",
-};
-
 export function PackagesPage() {
-  const [packages, setPackages] = useState<Project[]>([]);
+  const [packages, setPackages] = useState<Package[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -51,25 +36,25 @@ export function PackagesPage() {
     <div className="space-y-5 py-2 animate-in fade-in-0 duration-300">
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">
-          Investment Packages
+          Packages
         </h1>
         <p className="mt-1 text-sm text-ink-500">
-          Choose from our investment packages and start earning daily returns.
+          Pick a tier and start earning daily returns.
         </p>
       </div>
 
       {loading && (
         <div className="space-y-3">
           {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-32 rounded-3xl" />
+            <Skeleton key={i} className="h-32 rounded-2xl" />
           ))}
         </div>
       )}
 
-      {!loading && projects.length === 0 && (
-        <div className="flex flex-col items-center gap-3 rounded-3xl border border-dashed border-ink-200 py-14 text-center">
+      {!loading && packages.length === 0 && (
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-ink-200 py-14 text-center">
           <div className="grid h-12 w-12 place-items-center rounded-full bg-ink-100 text-ink-400">
-            <Building2 size={22} />
+            <PackageIcon size={22} />
           </div>
           <div>
             <p className="text-sm font-semibold text-ink-700">
@@ -81,45 +66,49 @@ export function PackagesPage() {
       )}
 
       <div className="space-y-3">
-        {packages.map((p) => (
-          <Link key={p.id} to={`/packages/${p.id}`} className="block active:scale-[0.99] transition">
-            <Card className="overflow-hidden transition hover:border-primary/30">
-              {p.imageUrl ? (
-                <img
-                  src={p.imageUrl}
-                  alt={p.title}
-                  className="h-36 w-full object-cover"
-                />
-              ) : (
-                <div className="grid h-28 w-full place-items-center bg-gradient-to-br from-accent to-ink-50 text-brand-300">
-                  <Building2 size={32} />
-                </div>
-              )}
-              <div className="p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="font-bold text-ink-900">{p.title}</p>
-                  <Badge className="shrink-0">
-                    <TrendingUp size={12} />
-                    {Number(p.expectedReturnPct)}%
-                  </Badge>
-                </div>
-                <p className="mt-1 flex items-center gap-1 text-xs text-ink-500">
-                  <MapPin size={12} />
-                  {p.location}
+        {packages.map((p) => {
+          const { gradient } = tierStyle(p.title);
+          const { main: textMain, muted: textMuted, divider, pill } = tierTextClasses(
+            tierStyle(p.title),
+          );
+
+          return (
+            <Link
+              key={p.id}
+              to={`/packages/${p.id}`}
+              className={`block overflow-hidden rounded-2xl bg-gradient-to-br p-5 shadow-soft-lg transition active:scale-[0.98] ${gradient}`}
+            >
+              <div className="flex items-start justify-between">
+                <p className={`text-xs font-bold uppercase tracking-[0.15em] ${textMuted}`}>
+                  {p.title}
                 </p>
-                <span
-                  className={`mt-3 inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_COLOR[p.fundingStatus]}`}
-                >
-                  {STATUS_LABEL[p.fundingStatus]}
+                <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${pill} ${textMain}`}>
+                  {Number(p.durationDays)} days
                 </span>
-                <p className="mt-2 text-xs font-medium text-ink-600">
-                  Min ₵{Number(p.minInvestmentGhs).toLocaleString()} · Profit ₵
-                  {minDailyRoi(p).toLocaleString()}/day
-                </p>
               </div>
-            </Card>
-          </Link>
-        ))}
+
+              <p className={`mt-3 text-3xl font-extrabold tracking-tight ${textMain}`}>
+                ₵{Number(p.amountGhs).toLocaleString()}
+              </p>
+              <p className={`text-xs font-medium ${textMuted}`}>invested</p>
+
+              <div className={`mt-4 flex items-center justify-between border-t pt-3 ${divider}`}>
+                <div>
+                  <p className={`text-lg font-bold ${textMain}`}>
+                    {Number(p.expectedReturnPct)}%
+                  </p>
+                  <p className={`text-[11px] ${textMuted}`}>total return</p>
+                </div>
+                <div className="text-right">
+                  <p className={`text-lg font-bold ${textMain}`}>
+                    ₵{dailyRoi(p).toLocaleString()}
+                  </p>
+                  <p className={`text-[11px] ${textMuted}`}>per day</p>
+                </div>
+              </div>
+            </Link>
+          );
+        })}
       </div>
     </div>
   );

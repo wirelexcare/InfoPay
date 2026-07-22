@@ -84,8 +84,8 @@ export function KycPage() {
   return (
     <div className="flex min-h-full flex-col justify-center py-6">
       <div className="mb-8">
-        <div className="mb-3 grid h-11 w-11 place-items-center rounded-2xl bg-accent text-accent-foreground">
-          <ShieldCheck size={22} />
+        <div className="mb-3 grid h-11 w-11 place-items-center rounded-xl bg-ink-900 text-white">
+          <ShieldCheck size={20} />
         </div>
         <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">
           Verify your identity
@@ -159,7 +159,6 @@ export function KycPage() {
 
         <Button
           type="submit"
-          variant="brand"
           size="lg"
           disabled={loading}
           className="w-full"

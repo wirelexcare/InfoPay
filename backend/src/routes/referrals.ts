@@ -100,7 +100,7 @@ referralsRouter.get("/referees", async (req: AuthedRequest, res) => {
       .select({
         userId: users.id,
         fullName: users.fullName,
-        email: users.email,
+        phone: users.phone,
         referredAt: referralRelationships.createdAt,
         totalInvestedGhs: portfolios.totalInvestedGhs,
       })
@@ -135,7 +135,7 @@ referralsRouter.get("/rewards", async (req: AuthedRequest, res) => {
         rewardAmountGhs: referralRewards.rewardAmountGhs,
         status: referralRewards.status,
         createdAt: referralRewards.createdAt,
-        refereeEmail: users.email,
+        refereePhone: users.phone,
         refereeFullName: users.fullName,
       })
       .from(referralRewards)

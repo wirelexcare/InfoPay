@@ -1,32 +1,19 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, PauseCircle, PlayCircle } from "lucide-react";
+import { ArrowLeft, PauseCircle, PlayCircle } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { PackageForm, type PackageFormValues } from "../components/PackageForm";
 
-interface Project extends ProjectFormValues {
+interface Package extends PackageFormValues {
   id: string;
-  fundingStatus: "open" | "target_reached" | "stopped";
-  raisedAmountGhs: string;
+  isActive: boolean;
 }
-
-const STATUS_LABEL: Record<Project["fundingStatus"], string> = {
-  open: "Open for investment",
-  target_reached: "Target reached",
-  stopped: "Stopped",
-};
-
-const STATUS_COLOR: Record<Project["fundingStatus"], string> = {
-  open: "bg-green-50 text-green-700",
-  target_reached: "bg-blue-50 text-blue-700",
-  stopped: "bg-red-50 text-red-700",
-};
 
 export function AdminPackageEditPage() {
   const { packageId } = useParams();
   const navigate = useNavigate();
-  const [package_, setPackage] = useState<Project | null>(null);
+  const [package_, setPackage] = useState<Package | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [statusUpdating, setStatusUpdating] = useState(false);
@@ -34,13 +21,8 @@ export function AdminPackageEditPage() {
   const fetchPackage = async () => {
     try {
       setLoading(true);
-      const res = await api.get(`/api/admin/projects/${packageId}`);
-      const data = res.data.data;
-      setPackage({
-        ...data,
-        maxInvestmentGhs: data.maxInvestmentGhs ?? "",
-        imageUrl: data.imageUrl ?? "",
-      });
+      const res = await api.get(`/api/admin/packages/${packageId}`);
+      setPackage(res.data.data);
     } catch (error) {
       console.error("Error:", error);
       toast.error("Failed to load package");
@@ -56,10 +38,11 @@ export function AdminPackageEditPage() {
   async function handleSave(values: PackageFormValues) {
     try {
       setSubmitting(true);
-      await api.patch(`/api/admin/projects/${packageId}`, {
-        ...values,
-        imageUrl: values.imageUrl || undefined,
-        maxInvestmentGhs: values.maxInvestmentGhs || undefined,
+      await api.patch(`/api/admin/packages/${packageId}`, {
+        title: values.title,
+        minInvestmentGhs: values.minInvestmentGhs,
+        expectedReturnPct: values.expectedReturnPct,
+        durationDays: values.durationDays,
       });
       toast.success("Package updated");
       fetchPackage();
@@ -71,11 +54,11 @@ export function AdminPackageEditPage() {
     }
   }
 
-  async function handleSetStatus(status: Project["fundingStatus"]) {
+  async function handleToggleActive(isActive: boolean) {
     try {
       setStatusUpdating(true);
-      await api.post(`/api/admin/projects/${packageId}/funding-status`, { status });
-      toast.success(`Marked as "${STATUS_LABEL[status]}"`);
+      await api.post(`/api/admin/packages/${packageId}/active`, { isActive });
+      toast.success(isActive ? "Package activated" : "Package deactivated");
       fetchPackage();
     } catch (error) {
       console.error("Error:", error);
@@ -120,9 +103,13 @@ export function AdminPackageEditPage() {
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-2xl font-bold text-ink-900">{package_.title}</h1>
           <span
-            className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUS_COLOR[package_.fundingStatus]}`}
+            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+              package_.isActive
+                ? "bg-green-50 text-green-700"
+                : "bg-ink-100 text-ink-500"
+            }`}
           >
-            {STATUS_LABEL[package_.fundingStatus]}
+            {package_.isActive ? "Active" : "Inactive"}
           </span>
         </div>
 
@@ -132,16 +119,16 @@ export function AdminPackageEditPage() {
           </p>
           <div className="flex flex-wrap gap-2">
             <button
-              onClick={() => handleSetStatus("open")}
-              disabled={statusUpdating || package_.fundingStatus === "open"}
+              onClick={() => handleToggleActive(true)}
+              disabled={statusUpdating || package_.isActive}
               className="flex items-center gap-2 rounded-lg bg-green-50 px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-100 disabled:opacity-40"
             >
               <PlayCircle size={16} />
               Activate
             </button>
             <button
-              onClick={() => handleSetStatus("stopped")}
-              disabled={statusUpdating || package_.fundingStatus === "stopped"}
+              onClick={() => handleToggleActive(false)}
+              disabled={statusUpdating || !package_.isActive}
               className="flex items-center gap-2 rounded-lg bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-40"
             >
               <PauseCircle size={16} />

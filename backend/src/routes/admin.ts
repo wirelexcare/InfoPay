@@ -1,6 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
-import { eq, gte, and, desc, sql, or, ilike } from "drizzle-orm";
+import { eq, gte, and, asc, desc, sql, or, ilike } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { db } from "../db/index.js";
@@ -57,7 +57,7 @@ adminRouter.use(requireAdmin);
 // Never leak passwordHash to the admin frontend
 const SAFE_USER_COLUMNS = {
   id: users.id,
-  email: users.email,
+  phone: users.phone,
   fullName: users.fullName,
   country: users.country,
   preferredCurrency: users.preferredCurrency,
@@ -101,7 +101,7 @@ adminRouter.get("/users", async (req: AuthedRequest, res) => {
       const searchPattern = `%${search}%`;
       conditions.push(
         or(
-          ilike(users.email, searchPattern),
+          ilike(users.phone, searchPattern),
           ilike(users.fullName, searchPattern),
         ),
       );
@@ -435,7 +435,7 @@ adminRouter.get("/projects", async (req: AuthedRequest, res) => {
       .select()
       .from(projects)
       .where(whereClause)
-      .orderBy(desc(projects.createdAt))
+      .orderBy(asc(projects.minInvestmentGhs))
       .limit(limit)
       .offset(offset);
 
@@ -470,21 +470,22 @@ adminRouter.get("/projects/:projectId", async (req: AuthedRequest, res) => {
   }
 });
 
+// Empty strings arrive from optional form fields the UI no longer shows;
+// treat them as absent instead of failing number coercion.
+const emptyToUndefined = (v: unknown) => (v === "" || v == null ? undefined : v);
+const optionalPositiveNumber = z.preprocess(emptyToUndefined, z.coerce.number().positive().optional());
+
 const projectFieldsSchema = z.object({
   title: z.string().min(3),
-  description: z.string().min(10),
-  location: z.string().min(2),
-  targetAmountGhs: z.coerce.number().positive(),
+  description: z.string().optional().default(""),
+  location: z.string().optional().default(""),
+  targetAmountGhs: optionalPositiveNumber,
   minInvestmentGhs: z.coerce.number().positive(),
-  maxInvestmentGhs: z.coerce.number().positive().optional().nullable(),
+  maxInvestmentGhs: optionalPositiveNumber,
   expectedReturnPct: z.coerce.number().positive(),
-  durationMonths: z.coerce.number().int().positive(),
-  imageUrl: z.string().url().optional().nullable(),
-}).refine(
-  (data) =>
-    data.maxInvestmentGhs == null || data.maxInvestmentGhs >= data.minInvestmentGhs,
-  { message: "Maximum investment must be greater than or equal to minimum investment", path: ["maxInvestmentGhs"] },
-);
+  durationDays: z.coerce.number().int().positive(),
+  imageUrl: z.preprocess(emptyToUndefined, z.string().url().optional()),
+});
 
 adminRouter.post("/projects", requirePermission("projects.manage"), async (req: AuthedRequest, res) => {
   try {
@@ -500,11 +501,11 @@ adminRouter.post("/projects", requirePermission("projects.manage"), async (req: 
         title: data.title,
         description: data.description,
         location: data.location,
-        targetAmountGhs: data.targetAmountGhs.toString(),
+        targetAmountGhs: (data.targetAmountGhs ?? data.minInvestmentGhs).toString(),
         minInvestmentGhs: data.minInvestmentGhs.toString(),
         maxInvestmentGhs: data.maxInvestmentGhs?.toString(),
         expectedReturnPct: data.expectedReturnPct.toString(),
-        durationMonths: data.durationMonths.toString(),
+        durationDays: data.durationDays.toString(),
         imageUrl: data.imageUrl,
       })
       .returning();
@@ -533,11 +534,11 @@ adminRouter.patch("/projects/:projectId", requirePermission("projects.manage"), 
         title: data.title,
         description: data.description,
         location: data.location,
-        targetAmountGhs: data.targetAmountGhs.toString(),
+        targetAmountGhs: (data.targetAmountGhs ?? data.minInvestmentGhs).toString(),
         minInvestmentGhs: data.minInvestmentGhs.toString(),
         maxInvestmentGhs: data.maxInvestmentGhs?.toString() ?? null,
         expectedReturnPct: data.expectedReturnPct.toString(),
-        durationMonths: data.durationMonths.toString(),
+        durationDays: data.durationDays.toString(),
         imageUrl: data.imageUrl ?? null,
         updatedAt: new Date(),
       })
@@ -621,6 +622,168 @@ adminRouter.post(
     }
   },
 );
+
+// ============ PACKAGES (Alias for PROJECTS) ============
+// Routes for /packages use the same handlers as /projects for investment packages
+
+adminRouter.get("/packages", async (req: AuthedRequest, res) => {
+  try {
+    const isActive = req.query.active !== "false";
+    const search = (req.query.search as string) || "";
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = 50;
+    const offset = (page - 1) * limit;
+
+    const conditions = [eq(projects.isActive, isActive)];
+    if (search) {
+      const searchPattern = `%${search}%`;
+      conditions.push(
+        or(ilike(projects.title, searchPattern), ilike(projects.location, searchPattern))!,
+      );
+    }
+    const whereClause = and(...conditions);
+
+    const data = await db
+      .select()
+      .from(projects)
+      .where(whereClause)
+      .orderBy(asc(projects.minInvestmentGhs))
+      .limit(limit)
+      .offset(offset);
+
+    const countResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(projects)
+      .where(whereClause);
+    const total = countResult[0]?.count || 0;
+
+    res.json({ data, total, page, limit });
+  } catch (error) {
+    console.error("Error fetching packages:", error);
+    res.status(500).json({ error: "Failed to fetch packages" });
+  }
+});
+
+adminRouter.get("/packages/:packageId", async (req: AuthedRequest, res) => {
+  try {
+    const [package_] = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.id, req.params.packageId));
+
+    if (!package_) {
+      return res.status(404).json({ error: "Package not found" });
+    }
+
+    res.json({ data: package_ });
+  } catch (error) {
+    console.error("Error fetching package:", error);
+    res.status(500).json({ error: "Failed to fetch package" });
+  }
+});
+
+adminRouter.post("/packages", async (req: AuthedRequest, res) => {
+  try {
+    const parsed = projectFieldsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+
+    const { data } = parsed;
+    const [package_] = await db
+      .insert(projects)
+      .values({
+        title: data.title,
+        description: data.description,
+        location: data.location,
+        targetAmountGhs: (data.targetAmountGhs ?? data.minInvestmentGhs).toString(),
+        minInvestmentGhs: data.minInvestmentGhs.toString(),
+        maxInvestmentGhs: data.maxInvestmentGhs?.toString(),
+        expectedReturnPct: data.expectedReturnPct.toString(),
+        durationDays: data.durationDays.toString(),
+        imageUrl: data.imageUrl,
+      })
+      .returning();
+
+    await logAdminAction(req.user!.userId, "CREATE_PACKAGE", "packages", package_.id);
+
+    res.json(package_);
+  } catch (error: any) {
+    console.error("Error creating package:", error);
+    res.status(500).json({ error: error.message || "Failed to create package" });
+  }
+});
+
+adminRouter.patch("/packages/:packageId", async (req: AuthedRequest, res) => {
+  try {
+    const parsed = projectFieldsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+
+    const { data } = parsed;
+    const [package_] = await db
+      .update(projects)
+      .set({
+        title: data.title,
+        description: data.description,
+        location: data.location,
+        targetAmountGhs: (data.targetAmountGhs ?? data.minInvestmentGhs).toString(),
+        minInvestmentGhs: data.minInvestmentGhs.toString(),
+        maxInvestmentGhs: data.maxInvestmentGhs?.toString(),
+        expectedReturnPct: data.expectedReturnPct.toString(),
+        durationDays: data.durationDays.toString(),
+        imageUrl: data.imageUrl,
+        updatedAt: new Date(),
+      })
+      .where(eq(projects.id, req.params.packageId))
+      .returning();
+
+    if (!package_) {
+      return res.status(404).json({ error: "Package not found" });
+    }
+
+    await logAdminAction(req.user!.userId, "UPDATE_PACKAGE", "packages", package_.id);
+
+    res.json(package_);
+  } catch (error: any) {
+    console.error("Error updating package:", error);
+    res.status(500).json({ error: error.message || "Failed to update package" });
+  }
+});
+
+const packageActiveSchema = z.object({ isActive: z.boolean() });
+
+adminRouter.post("/packages/:packageId/active", async (req: AuthedRequest, res) => {
+  try {
+    const parsed = packageActiveSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+
+    const [package_] = await db
+      .update(projects)
+      .set({ isActive: parsed.data.isActive, updatedAt: new Date() })
+      .where(eq(projects.id, req.params.packageId))
+      .returning();
+
+    if (!package_) {
+      return res.status(404).json({ error: "Package not found" });
+    }
+
+    await logAdminAction(
+      req.user!.userId,
+      parsed.data.isActive ? "ACTIVATE_PACKAGE" : "DEACTIVATE_PACKAGE",
+      "packages",
+      package_.id,
+    );
+
+    res.json(package_);
+  } catch (error: any) {
+    console.error("Error updating package status:", error);
+    res.status(500).json({ error: error.message || "Failed to update package status" });
+  }
+});
 
 // ============ FINANCIALS ============
 
@@ -948,12 +1111,12 @@ adminRouter.get("/audit-logs", async (req: AuthedRequest, res) => {
 function computeDailyAmount(
   amountGhs: string,
   expectedReturnPct: string,
-  durationMonths: string,
+  durationDays: string,
 ): number {
-  const durationDays = Number(durationMonths) * 30;
-  if (durationDays <= 0) return 0;
+  const days = Number(durationDays);
+  if (days <= 0) return 0;
   const totalReturn = Number(amountGhs) * (Number(expectedReturnPct) / 100);
-  return Math.round((totalReturn / durationDays) * 100) / 100;
+  return Math.round((totalReturn / days) * 100) / 100;
 }
 
 function daysElapsedSince(createdAt: Date, capDays: number): number {
@@ -977,7 +1140,7 @@ adminRouter.get("/roi/investments", async (req: AuthedRequest, res) => {
       const searchPattern = `%${search}%`;
       conditions.push(
         or(
-          ilike(users.email, searchPattern),
+          ilike(users.phone, searchPattern),
           ilike(users.fullName, searchPattern),
           ilike(projects.title, searchPattern),
         )!,
@@ -995,9 +1158,9 @@ adminRouter.get("/roi/investments", async (req: AuthedRequest, res) => {
         projectId: projects.id,
         projectTitle: projects.title,
         expectedReturnPct: projects.expectedReturnPct,
-        durationMonths: projects.durationMonths,
+        durationDays: projects.durationDays,
         userFullName: users.fullName,
-        userEmail: users.email,
+        userPhone: users.phone,
       })
       .from(investments)
       .innerJoin(projects, eq(projects.id, investments.projectId))
@@ -1009,11 +1172,11 @@ adminRouter.get("/roi/investments", async (req: AuthedRequest, res) => {
 
     const data = await Promise.all(
       rows.map(async (inv) => {
-        const durationDays = Number(inv.durationMonths) * 30;
+        const durationDays = Number(inv.durationDays);
         const dailyAmount = computeDailyAmount(
           inv.amountGhs,
           inv.expectedReturnPct,
-          inv.durationMonths,
+          inv.durationDays,
         );
         const daysElapsed = daysElapsedSince(inv.createdAt, durationDays);
         const expectedPaid = Math.round(dailyAmount * daysElapsed * 100) / 100;
@@ -1065,7 +1228,7 @@ adminRouter.get("/roi/investments/:investmentId", async (req: AuthedRequest, res
         projectId: projects.id,
         projectTitle: projects.title,
         expectedReturnPct: projects.expectedReturnPct,
-        durationMonths: projects.durationMonths,
+        durationDays: projects.durationDays,
       })
       .from(investments)
       .innerJoin(projects, eq(projects.id, investments.projectId))
@@ -1086,11 +1249,11 @@ adminRouter.get("/roi/investments/:investmentId", async (req: AuthedRequest, res
       .where(eq(payouts.investmentId, investmentId))
       .orderBy(desc(payouts.createdAt));
 
-    const durationDays = Number(inv.durationMonths) * 30;
+    const durationDays = Number(inv.durationDays);
     const dailyAmount = computeDailyAmount(
       inv.amountGhs,
       inv.expectedReturnPct,
-      inv.durationMonths,
+      inv.durationDays,
     );
     const daysElapsed = daysElapsedSince(inv.createdAt, durationDays);
     const expectedPaid = Math.round(dailyAmount * daysElapsed * 100) / 100;
@@ -1221,7 +1384,7 @@ adminRouter.get("/referral-config", async (_req: AuthedRequest, res) => {
         rewardPercentage: referralConfig.rewardPercentage,
         isActive: referralConfig.isActive,
         updatedAt: referralConfig.updatedAt,
-        updatedByEmail: users.email,
+        updatedByPhone: users.phone,
       })
       .from(referralConfig)
       .leftJoin(users, eq(users.id, referralConfig.updatedBy))
@@ -1312,8 +1475,8 @@ adminRouter.get("/referral-rewards", async (req: AuthedRequest, res) => {
         rewardAmountGhs: referralRewards.rewardAmountGhs,
         status: referralRewards.status,
         createdAt: referralRewards.createdAt,
-        referrerEmail: referrerUsers.email,
-        refereeEmail: refereeUsers.email,
+        referrerPhone: referrerUsers.phone,
+        refereePhone: refereeUsers.phone,
       })
       .from(referralRewards)
       .innerJoin(referrerUsers, eq(referrerUsers.id, referralRewards.referrerId))
@@ -1358,7 +1521,7 @@ adminRouter.get("/deposit-settings", async (_req: AuthedRequest, res) => {
         accountName: depositSettings.accountName,
         accountNumber: depositSettings.accountNumber,
         updatedAt: depositSettings.updatedAt,
-        updatedByEmail: users.email,
+        updatedByPhone: users.phone,
       })
       .from(depositSettings)
       .leftJoin(users, eq(users.id, depositSettings.updatedBy))
@@ -1436,7 +1599,7 @@ adminRouter.get("/manual-deposits/pending", async (req: AuthedRequest, res) => {
         senderName: manualDeposits.senderName,
         senderNumber: manualDeposits.senderNumber,
         createdAt: manualDeposits.createdAt,
-        userEmail: users.email,
+        userPhone: users.phone,
         userFullName: users.fullName,
       })
       .from(manualDeposits)
@@ -1759,7 +1922,7 @@ adminRouter.get(
       const claims = await db
         .select({
           id: rewardClaims.id,
-          userEmail: users.email,
+          userPhone: users.phone,
           userFullName: users.fullName,
           claimedAmountGhs: rewardClaims.claimedAmountGhs,
           claimedAt: rewardClaims.claimedAt,

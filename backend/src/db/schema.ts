@@ -96,7 +96,7 @@ export const rewardClaimResultEnum = pgEnum("reward_claim_result", [
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
-  email: varchar("email", { length: 255 }).notNull().unique(),
+  phone: varchar("phone", { length: 20 }).notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   fullName: varchar("full_name", { length: 255 }).notNull(),
   country: varchar("country", { length: 2 }).notNull(),
@@ -151,7 +151,7 @@ export const projects = pgTable("projects", {
     precision: 5,
     scale: 2,
   }).notNull(),
-  durationMonths: numeric("duration_months", { precision: 4, scale: 0 }).notNull(),
+  durationDays: numeric("duration_days", { precision: 6, scale: 0 }).notNull(),
   imageUrl: text("image_url"),
   isActive: boolean("is_active").notNull().default(true),
   fundingStatus: fundingStatusEnum("funding_status").notNull().default("open"),

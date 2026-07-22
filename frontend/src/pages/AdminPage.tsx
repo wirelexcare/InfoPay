@@ -32,7 +32,7 @@ export function AdminPage() {
 
   useEffect(() => {
     if (user?.role !== "admin") {
-      navigate("/projects");
+      navigate("/packages");
       return;
     }
 
@@ -92,7 +92,7 @@ export function AdminPage() {
     { label: "Dashboard", icon: BarChart3, to: "/admin" },
     { label: "Users", icon: Users, to: "/admin/users" },
     { label: "KYC", icon: Users, to: "/admin/kyc" },
-    { label: "Projects", icon: Building2, to: "/admin/projects" },
+    { label: "Packages", icon: Building2, to: "/admin/packages" },
     { label: "Financials", icon: DollarSign, to: "/admin/financials" },
     { label: "Payments", icon: CreditCard, to: "/admin/payments" },
     { label: "Withdrawals", icon: CreditCard, to: "/admin/withdrawals" },
@@ -192,10 +192,10 @@ export function AdminPage() {
                   View All Users
                 </button>
                 <button
-                  onClick={() => navigate("/admin/projects")}
+                  onClick={() => navigate("/admin/packages")}
                   className="p-4 rounded-lg bg-green-50 text-green-700 font-medium transition hover:bg-green-100"
                 >
-                  Manage Projects
+                  Manage Packages
                 </button>
               </div>
             </div>

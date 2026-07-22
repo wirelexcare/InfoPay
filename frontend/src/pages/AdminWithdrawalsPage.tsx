@@ -12,7 +12,7 @@ interface Withdrawal {
   method: string | null;
   status: string;
   createdAt: string;
-  user?: { email: string; fullName: string };
+  user?: { phone: string; fullName: string };
   withdrawalMethod?: { accountName: string; accountNumber: string | null } | null;
 }
 
@@ -136,7 +136,7 @@ export function AdminWithdrawalsPage() {
                       <div className="text-sm font-medium text-ink-900">
                         {w.user?.fullName || "Unknown"}
                       </div>
-                      <div className="text-xs text-ink-500">{w.user?.email}</div>
+                      <div className="text-xs text-ink-500">{w.user?.phone}</div>
                     </td>
                     <td className="px-6 py-4 font-semibold text-ink-900">
                       ₵{parseFloat(w.amountGhs).toFixed(2)}

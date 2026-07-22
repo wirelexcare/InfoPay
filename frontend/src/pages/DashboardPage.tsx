@@ -1,14 +1,19 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import {
+  ArrowDownToLine,
+  ArrowUpFromLine,
   Building2,
   CheckCircle2,
   Coins,
+  Gift,
   Loader2,
+  PieChart,
   Plus,
   ShieldAlert,
   Smartphone,
   Trash2,
+  Trophy,
   TrendingUp,
   User as UserIcon,
 } from "lucide-react";
@@ -72,6 +77,21 @@ const emptyMethodForm = (type: "momo" | "bank" | "crypto") => ({
   cryptoAddress: "",
   isDefault: false,
 });
+
+const QUICK_ACTIONS: {
+  to: string;
+  label: string;
+  icon: typeof Building2;
+  tile: string;
+  fg: string;
+}[] = [
+  { to: "/packages", label: "Invest", icon: Building2, tile: "bg-sky-100", fg: "text-sky-600" },
+  { to: "/wallet", label: "Add money", icon: ArrowDownToLine, tile: "bg-emerald-100", fg: "text-emerald-600" },
+  { to: "/wallet", label: "Withdraw", icon: ArrowUpFromLine, tile: "bg-amber-100", fg: "text-amber-600" },
+  { to: "/portfolio", label: "Portfolio", icon: PieChart, tile: "bg-violet-100", fg: "text-violet-600" },
+  { to: "/referrals", label: "Refer & earn", icon: Gift, tile: "bg-rose-100", fg: "text-rose-600" },
+  { to: "/wallet", label: "Rewards", icon: Trophy, tile: "bg-indigo-100", fg: "text-indigo-600" },
+];
 
 export function DashboardPage() {
   const user = useAuthStore((s) => s.user);
@@ -193,14 +213,53 @@ export function DashboardPage() {
     COUNTRIES.find((c) => c.code === user?.country)?.name ?? user?.country;
 
   return (
-    <div className="space-y-6 py-2 animate-in fade-in-0 duration-300">
-      <div>
-        <p className="text-sm text-ink-500">Welcome back,</p>
-        <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">
-          {firstName} 👋
-        </h1>
+    <div className="pb-2 animate-in fade-in-0 duration-300">
+      <div className="-mx-4 -mt-16 bg-gradient-to-br from-primary to-sky-600 px-4 pb-14 pt-24 text-white sm:-mx-6 sm:px-6">
+        {loading ? (
+          <Skeleton className="h-20 w-56 rounded-xl bg-white/20" />
+        ) : (
+          <div>
+            <p className="text-sm text-white/70">Total invested</p>
+            <p className="mt-1 text-[2.75rem] font-extrabold leading-none tracking-tight">
+              {formatCurrency(
+                convertFromGhs(Number(portfolio?.totalInvestedGhs ?? 0), currency),
+                currency,
+              )}
+            </p>
+            <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-sm">
+              <TrendingUp size={15} />
+              <span className="font-semibold">
+                {formatCurrency(
+                  convertFromGhs(Number(portfolio?.totalReturnsGhs ?? 0), currency),
+                  currency,
+                )}
+              </span>
+              <span className="text-white/70">in returns</span>
+            </div>
+          </div>
+        )}
       </div>
 
+      <div className="relative -mt-8 rounded-2xl border border-border bg-card p-4 shadow-soft-lg">
+        <div className="grid grid-cols-3 gap-x-2 gap-y-4">
+          {QUICK_ACTIONS.map(({ to, label, icon: Icon, tile, fg }) => (
+            <Link
+              key={label}
+              to={to}
+              className="flex flex-col items-center gap-2 transition active:scale-95"
+            >
+              <span className={`grid h-12 w-12 place-items-center rounded-2xl ${tile} ${fg}`}>
+                <Icon size={20} strokeWidth={2.1} />
+              </span>
+              <span className="text-center text-[11px] font-semibold leading-tight text-ink-700">
+                {label}
+              </span>
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-6 space-y-6">
       {user?.kycStatus !== "verified" && (
         <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5">
           <ShieldAlert size={18} className="mt-0.5 shrink-0 text-amber-600" />
@@ -217,32 +276,6 @@ export function DashboardPage() {
         </div>
       )}
 
-      {loading ? (
-        <Skeleton className="h-32 rounded-3xl" />
-      ) : (
-        <div className="overflow-hidden rounded-3xl bg-ink-900 p-5 text-white shadow-soft-lg">
-          <p className="text-xs font-medium uppercase tracking-wide text-white/60">
-            Total invested
-          </p>
-          <p className="mt-1 text-3xl font-extrabold tracking-tight">
-            {formatCurrency(
-              convertFromGhs(Number(portfolio?.totalInvestedGhs ?? 0), currency),
-              currency,
-            )}
-          </p>
-          <div className="mt-4 flex items-center gap-1.5 text-sm text-brand-400">
-            <TrendingUp size={16} />
-            <span className="font-semibold">
-              {formatCurrency(
-                convertFromGhs(Number(portfolio?.totalReturnsGhs ?? 0), currency),
-                currency,
-              )}
-            </span>
-            <span className="text-white/50">in returns</span>
-          </div>
-        </div>
-      )}
-
       <Card className="p-4">
         <div className="flex items-center gap-3">
           <div className="grid h-12 w-12 place-items-center rounded-full bg-accent text-accent-foreground">
@@ -250,7 +283,7 @@ export function DashboardPage() {
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate font-bold text-ink-900">{user?.fullName}</p>
-            <p className="truncate text-xs text-ink-500">{user?.email}</p>
+            <p className="truncate text-xs text-ink-500">{user?.phone}</p>
           </div>
         </div>
         <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
@@ -330,6 +363,7 @@ export function DashboardPage() {
             })}
           </div>
         )}
+      </div>
       </div>
 
       <Sheet open={showForm} onOpenChange={setShowForm}>

@@ -7,7 +7,7 @@ import { api } from "../lib/api";
 interface UserDetail {
   user: {
     id: string;
-    email: string;
+    phone: string;
     fullName: string;
     country: string;
     role: string;
@@ -184,7 +184,7 @@ export function AdminUserDetailPage() {
           <div className="flex items-start justify-between flex-wrap gap-3">
             <div>
               <h1 className="text-2xl font-bold text-ink-900">{user.fullName}</h1>
-              <p className="text-ink-600">{user.email}</p>
+              <p className="text-ink-600">{user.phone}</p>
             </div>
             <div className="flex gap-2">
               {user.isSuspended ? (

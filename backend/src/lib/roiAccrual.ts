@@ -15,9 +15,9 @@ function startOfToday(): Date {
   return d;
 }
 
-function addMonths(date: Date, months: number): Date {
+function addDays(date: Date, days: number): Date {
   const result = new Date(date);
-  result.setMonth(result.getMonth() + months);
+  result.setDate(result.getDate() + days);
   return result;
 }
 
@@ -38,7 +38,7 @@ export async function runDailyRoiAccrual() {
       createdAt: investments.createdAt,
       projectId: investments.projectId,
       expectedReturnPct: projects.expectedReturnPct,
-      durationMonths: projects.durationMonths,
+      durationDays: projects.durationDays,
       projectTitle: projects.title,
     })
     .from(investments)
@@ -58,10 +58,10 @@ export async function runDailyRoiAccrual() {
   for (const inv of activeInvestments) {
     if (creditedSet.has(inv.id)) continue;
 
-    const maturity = addMonths(new Date(inv.createdAt), Number(inv.durationMonths));
+    const durationDays = Number(inv.durationDays);
+    const maturity = addDays(new Date(inv.createdAt), durationDays);
     if (today >= maturity) continue;
 
-    const durationDays = Number(inv.durationMonths) * 30;
     if (durationDays <= 0) continue;
 
     const amount = Number(inv.amountGhs);

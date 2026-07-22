@@ -174,7 +174,6 @@ function RewardsTabContent({ onClaimed }: { onClaimed: () => void }) {
             size="lg"
             disabled={claiming}
             className="w-full"
-            variant="brand"
           >
             {claiming ? "Claiming..." : "Claim Reward"}
           </Button>
@@ -369,9 +368,9 @@ export function WalletPage() {
   if (loading) {
     return (
       <div className="space-y-4">
-        <Skeleton className="h-28 rounded-3xl" />
-        <Skeleton className="h-12 rounded-2xl" />
-        <Skeleton className="h-56 rounded-3xl" />
+        <Skeleton className="h-28 rounded-2xl" />
+        <Skeleton className="h-12 rounded-xl" />
+        <Skeleton className="h-56 rounded-2xl" />
       </div>
     );
   }
@@ -389,8 +388,8 @@ export function WalletPage() {
         </p>
       </div>
 
-      <div className="overflow-hidden rounded-3xl bg-ink-900 p-5 text-white shadow-soft-lg">
-        <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-white/60">
+      <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-sky-600 p-5 text-white shadow-soft-lg">
+        <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-white/70">
           <WalletIcon size={14} />
           Available balance
         </p>
@@ -465,7 +464,6 @@ export function WalletPage() {
               </div>
               <Button
                 type="submit"
-                variant="brand"
                 size="lg"
                 disabled={depositLoading}
                 className="w-full"
@@ -488,7 +486,7 @@ export function WalletPage() {
                   key={type}
                   type="button"
                   onClick={() => setWithdrawType(type)}
-                  className={`flex flex-col items-center gap-1.5 rounded-2xl border px-2 py-3 text-xs font-semibold transition active:scale-95 ${
+                  className={`flex flex-col items-center gap-1.5 rounded-xl border px-2 py-3 text-xs font-semibold transition active:scale-95 ${
                     withdrawType === type
                       ? "border-primary bg-accent text-accent-foreground"
                       : "border-border bg-card text-ink-500 hover:border-ink-300"
@@ -744,7 +742,7 @@ export function WalletPage() {
 
               <div>
                 <Label>Deposit address (TRC20)</Label>
-                <div className="flex items-center gap-2 rounded-2xl border border-input bg-card px-4 py-3 shadow-soft">
+                <div className="flex items-center gap-2 rounded-xl border border-input bg-card px-4 py-3 shadow-soft">
                   <code className="min-w-0 flex-1 break-all text-xs text-ink-900">
                     {cryptoInvoice.payAddress}
                   </code>
@@ -888,7 +886,6 @@ export function WalletPage() {
 
               <Button
                 type="submit"
-                variant="brand"
                 size="lg"
                 disabled={momoSubmitting}
                 className="w-full"

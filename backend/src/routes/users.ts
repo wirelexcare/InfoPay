@@ -11,7 +11,7 @@ usersRouter.get("/me", requireAuth, async (req: AuthedRequest, res) => {
   const [user] = await db
     .select({
       id: users.id,
-      email: users.email,
+      phone: users.phone,
       fullName: users.fullName,
       country: users.country,
       preferredCurrency: users.preferredCurrency,

@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Building2, ChevronRight, Wallet } from "lucide-react";
+import { ChevronRight, Wallet } from "lucide-react";
 import { api } from "../lib/api";
 import { useAuthStore } from "../lib/store";
 import { convertFromGhs, formatCurrency } from "../lib/currency";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Skeleton } from "../components/ui/skeleton";
+import { tierStyle } from "../lib/tierTheme";
 
 interface Investment {
   id: string;
@@ -51,7 +52,7 @@ export function PortfolioPage() {
           My investments
         </h1>
         <p className="mt-1 text-sm text-ink-500">
-          Track every project you've backed.
+          Track every package you've invested in.
         </p>
       </div>
 
@@ -64,7 +65,7 @@ export function PortfolioPage() {
       )}
 
       {!loading && investments.length === 0 && (
-        <div className="flex flex-col items-center gap-3 rounded-3xl border border-dashed border-ink-200 py-14 text-center">
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-ink-200 py-14 text-center">
           <div className="grid h-12 w-12 place-items-center rounded-full bg-ink-100 text-ink-400">
             <Wallet size={22} />
           </div>
@@ -73,51 +74,46 @@ export function PortfolioPage() {
               No investments yet
             </p>
             <p className="text-xs text-ink-400">
-              Browse projects to get started.
+              Browse packages to get started.
             </p>
           </div>
         </div>
       )}
 
       <div className="space-y-3">
-        {investments.map((inv) => (
-          <Link
-            key={inv.id}
-            to={`/portfolio/${inv.id}`}
-            className="block active:scale-[0.99] transition"
-          >
-            <Card className="flex items-center gap-3 p-4 transition hover:border-primary/30">
-              {inv.projectImageUrl ? (
-                <img
-                  src={inv.projectImageUrl}
-                  alt={inv.projectTitle}
-                  className="h-12 w-12 shrink-0 rounded-xl object-cover"
+        {investments.map((inv) => {
+          const { gradient } = tierStyle(inv.projectTitle);
+          return (
+            <Link
+              key={inv.id}
+              to={`/portfolio/${inv.id}`}
+              className="block active:scale-[0.99] transition"
+            >
+              <Card className="flex items-center gap-3 p-4 transition hover:border-primary/30">
+                <div
+                  className={`h-11 w-11 shrink-0 rounded-xl bg-gradient-to-br ${gradient}`}
                 />
-              ) : (
-                <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-accent to-ink-50 text-brand-300">
-                  <Building2 size={20} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-bold text-ink-900">
+                    {inv.projectTitle}
+                  </p>
+                  <p className="mt-0.5 text-sm text-ink-500">
+                    {formatCurrency(
+                      convertFromGhs(Number(inv.amountGhs), currency),
+                      currency,
+                    )}
+                  </p>
                 </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-bold text-ink-900">
-                  {inv.projectTitle}
-                </p>
-                <p className="mt-0.5 text-sm text-ink-500">
-                  {formatCurrency(
-                    convertFromGhs(Number(inv.amountGhs), currency),
-                    currency,
-                  )}
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <Badge variant={statusVariant[inv.status] ?? "muted"}>
-                  {statusLabels[inv.status] ?? inv.status}
-                </Badge>
-                <ChevronRight size={16} className="text-ink-300" />
-              </div>
-            </Card>
-          </Link>
-        ))}
+                <div className="flex shrink-0 items-center gap-2">
+                  <Badge variant={statusVariant[inv.status] ?? "muted"}>
+                    {statusLabels[inv.status] ?? inv.status}
+                  </Badge>
+                  <ChevronRight size={16} className="text-ink-300" />
+                </div>
+              </Card>
+            </Link>
+          );
+        })}
       </div>
     </div>
   );

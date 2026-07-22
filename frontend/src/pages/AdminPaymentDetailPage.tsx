@@ -21,7 +21,7 @@ interface PaymentDetail {
   status: string;
   user: {
     id: string;
-    email: string;
+    phone: string;
     fullName: string;
     country: string;
     kycStatus: string;
@@ -102,7 +102,7 @@ export function AdminPaymentDetailPage() {
           {payment.user ? (
             <>
               <Row label="Name" value={payment.user.fullName} />
-              <Row label="Email" value={payment.user.email} />
+              <Row label="Phone" value={payment.user.phone} />
               <Row label="Country" value={payment.user.country} />
               <Row label="KYC Status" value={payment.user.kycStatus} />
               <button

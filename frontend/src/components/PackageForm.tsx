@@ -1,28 +1,17 @@
 import { useState, type FormEvent } from "react";
-import { ImageUpload } from "./ImageUpload";
 
 export interface PackageFormValues {
   title: string;
-  description: string;
-  location: string;
-  targetAmountGhs: string;
   minInvestmentGhs: string;
-  maxInvestmentGhs: string;
   expectedReturnPct: string;
-  durationMonths: string;
-  imageUrl: string;
+  durationDays: string;
 }
 
 const emptyValues: PackageFormValues = {
   title: "",
-  description: "",
-  location: "",
-  targetAmountGhs: "",
   minInvestmentGhs: "",
-  maxInvestmentGhs: "",
   expectedReturnPct: "",
-  durationMonths: "",
-  imageUrl: "",
+  durationDays: "",
 };
 
 interface PackageFormProps {
@@ -45,6 +34,11 @@ export function PackageForm({
     ...initialValues,
   });
 
+  const days = Number(form.durationDays);
+  const dailyRoi = days > 0
+    ? ((Number(form.minInvestmentGhs) * Number(form.expectedReturnPct)) / 100 / days).toFixed(2)
+    : "0.00";
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     onSubmit(form);
@@ -55,69 +49,28 @@ export function PackageForm({
       onSubmit={handleSubmit}
       className="grid gap-4 rounded-lg border border-border bg-card p-6 md:grid-cols-2"
     >
+      {/* Package Name */}
       <div className="md:col-span-2">
-        <label className="text-sm font-medium text-ink-700">Image</label>
-        <div className="mt-1">
-          <ImageUpload
-            value={form.imageUrl || null}
-            onChange={(url) => setForm({ ...form, imageUrl: url || "" })}
-          />
-        </div>
-      </div>
-
-      <div className="md:col-span-2">
-        <label className="text-sm font-medium text-ink-700">Title</label>
+        <label className="text-sm font-medium text-ink-700">Package Name</label>
         <input
           required
+          placeholder="e.g., Gold"
           value={form.title}
           onChange={(e) => setForm({ ...form, title: e.target.value })}
           className="mt-1 w-full rounded-lg border border-border px-3 py-2"
         />
       </div>
 
-      <div className="md:col-span-2">
-        <label className="text-sm font-medium text-ink-700">Description</label>
-        <textarea
-          required
-          rows={3}
-          value={form.description}
-          onChange={(e) => setForm({ ...form, description: e.target.value })}
-          className="mt-1 w-full rounded-lg border border-border px-3 py-2"
-        />
-      </div>
-
-      <div>
-        <label className="text-sm font-medium text-ink-700">Location</label>
-        <input
-          required
-          value={form.location}
-          onChange={(e) => setForm({ ...form, location: e.target.value })}
-          className="mt-1 w-full rounded-lg border border-border px-3 py-2"
-        />
-      </div>
-
+      {/* Amount */}
       <div>
         <label className="text-sm font-medium text-ink-700">
-          Target Amount (GHS)
+          Package Amount (GHS)
         </label>
         <input
           required
           type="number"
           step="0.01"
-          value={form.targetAmountGhs}
-          onChange={(e) => setForm({ ...form, targetAmountGhs: e.target.value })}
-          className="mt-1 w-full rounded-lg border border-border px-3 py-2"
-        />
-      </div>
-
-      <div>
-        <label className="text-sm font-medium text-ink-700">
-          Min Investment (GHS)
-        </label>
-        <input
-          required
-          type="number"
-          step="0.01"
+          placeholder="e.g., 5000"
           value={form.minInvestmentGhs}
           onChange={(e) =>
             setForm({ ...form, minInvestmentGhs: e.target.value })
@@ -126,30 +79,32 @@ export function PackageForm({
         />
       </div>
 
+      {/* Period in Days */}
       <div>
         <label className="text-sm font-medium text-ink-700">
-          Max Investment (GHS)
+          Period (Days)
         </label>
         <input
+          required
           type="number"
-          step="0.01"
-          placeholder="No limit"
-          value={form.maxInvestmentGhs}
-          onChange={(e) =>
-            setForm({ ...form, maxInvestmentGhs: e.target.value })
-          }
+          step="1"
+          placeholder="e.g., 90"
+          value={form.durationDays}
+          onChange={(e) => setForm({ ...form, durationDays: e.target.value })}
           className="mt-1 w-full rounded-lg border border-border px-3 py-2"
         />
       </div>
 
+      {/* ROI % */}
       <div>
         <label className="text-sm font-medium text-ink-700">
-          Expected Return (%)
+          ROI (%)
         </label>
         <input
           required
           type="number"
           step="0.01"
+          placeholder="e.g., 12.5"
           value={form.expectedReturnPct}
           onChange={(e) =>
             setForm({ ...form, expectedReturnPct: e.target.value })
@@ -158,32 +113,40 @@ export function PackageForm({
         />
       </div>
 
-      <div>
-        <label className="text-sm font-medium text-ink-700">
-          Duration (months)
-        </label>
-        <input
-          required
-          type="number"
-          value={form.durationMonths}
-          onChange={(e) => setForm({ ...form, durationMonths: e.target.value })}
-          className="mt-1 w-full rounded-lg border border-border px-3 py-2"
-        />
+      {/* Auto-calculated Daily ROI */}
+      <div className="md:col-span-2 p-3 rounded-lg bg-primary/10">
+        <div className="grid md:grid-cols-3 gap-4">
+          <div>
+            <p className="text-xs text-ink-500">Total Return (GHS)</p>
+            <p className="text-lg font-bold text-primary">
+              ₵{((Number(form.minInvestmentGhs) || 0) * (Number(form.expectedReturnPct) || 0) / 100).toFixed(2)}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-ink-500">Period (Days)</p>
+            <p className="text-lg font-bold text-primary">{days || 0}</p>
+          </div>
+          <div>
+            <p className="text-xs text-ink-500">Daily ROI (GHS)</p>
+            <p className="text-lg font-bold text-primary">₵{dailyRoi}</p>
+          </div>
+        </div>
       </div>
 
+      {/* Submit & Cancel */}
       <div className="md:col-span-2 flex gap-3">
         <button
           type="submit"
           disabled={submitting}
-          className="flex-1 rounded-lg bg-primary py-2.5 font-semibold text-primary-foreground disabled:opacity-50"
+          className="flex-1 rounded-lg bg-primary px-4 py-2.5 font-medium text-white disabled:opacity-50 hover:bg-primary/90 transition"
         >
-          {submitting ? "Saving..." : submitLabel}
+          {submitting ? "Creating..." : submitLabel}
         </button>
         {onCancel && (
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-lg border border-border px-6 py-2.5 font-semibold hover:bg-ink-50"
+            className="rounded-lg border border-border px-4 py-2.5 font-medium text-ink-600 hover:bg-ink-50 transition"
           >
             Cancel
           </button>

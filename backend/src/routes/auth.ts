@@ -35,7 +35,7 @@ const AFRICAN_COUNTRY_CURRENCY: Record<string, string> = {
 };
 
 const signupSchema = z.object({
-  email: z.string().email(),
+  phone: z.string().min(10).max(20),
   password: z.string().min(8),
   fullName: z.string().min(2),
   country: z.string().length(2),
@@ -47,16 +47,16 @@ authRouter.post("/signup", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  const { email, password, fullName, country, referralCode } = parsed.data;
+  const { phone, password, fullName, country, referralCode } = parsed.data;
   const countryCode = country.toUpperCase();
 
   const existing = await db
     .select({ id: users.id })
     .from(users)
-    .where(eq(users.email, email))
+    .where(eq(users.phone, phone))
     .limit(1);
   if (existing.length > 0) {
-    return res.status(409).json({ error: "Email already registered" });
+    return res.status(409).json({ error: "Phone number already registered" });
   }
 
   const passwordHash = await hashPassword(password);
@@ -65,7 +65,7 @@ authRouter.post("/signup", async (req, res) => {
   const [user] = await db
     .insert(users)
     .values({
-      email,
+      phone,
       passwordHash,
       fullName,
       country: countryCode,
@@ -73,7 +73,7 @@ authRouter.post("/signup", async (req, res) => {
     })
     .returning({
       id: users.id,
-      email: users.email,
+      phone: users.phone,
       fullName: users.fullName,
       country: users.country,
       preferredCurrency: users.preferredCurrency,
@@ -94,7 +94,7 @@ authRouter.post("/signup", async (req, res) => {
 });
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  phone: z.string().min(10).max(20),
   password: z.string(),
 });
 
@@ -103,15 +103,15 @@ authRouter.post("/login", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  const { email, password } = parsed.data;
+  const { phone, password } = parsed.data;
 
   const [user] = await db
     .select()
     .from(users)
-    .where(eq(users.email, email))
+    .where(eq(users.phone, phone))
     .limit(1);
   if (!user || !(await verifyPassword(password, user.passwordHash))) {
-    return res.status(401).json({ error: "Invalid email or password" });
+    return res.status(401).json({ error: "Invalid phone number or password" });
   }
 
   if (user.isSuspended) {
@@ -124,7 +124,7 @@ authRouter.post("/login", async (req, res) => {
   res.json({
     user: {
       id: user.id,
-      email: user.email,
+      phone: user.phone,
       fullName: user.fullName,
       country: user.country,
       preferredCurrency: user.preferredCurrency,
