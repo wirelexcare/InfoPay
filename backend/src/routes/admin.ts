@@ -230,6 +230,82 @@ adminRouter.post("/users/:userId/activate", requirePermission("users.manage"), a
   }
 });
 
+const walletAdjustmentSchema = z.object({
+  direction: z.enum(["credit", "debit"]),
+  amountGhs: z.coerce.number().positive(),
+  reason: z.string().trim().min(3).max(200),
+});
+
+adminRouter.post(
+  "/users/:userId/wallet-adjustment",
+  requirePermission("users.manage"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const { userId } = req.params;
+      const parsed = walletAdjustmentSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+      }
+      const { direction, amountGhs, reason } = parsed.data;
+
+      const [target] = await db.select().from(users).where(eq(users.id, userId));
+      if (!target) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Ensure a wallet row exists, then read the current balance.
+      const [inserted] = await db
+        .insert(wallets)
+        .values({ userId })
+        .onConflictDoNothing()
+        .returning();
+      const [wallet] =
+        inserted !== undefined
+          ? [inserted]
+          : await db.select().from(wallets).where(eq(wallets.userId, userId)).limit(1);
+
+      const balanceBefore = Number(wallet.balanceGhs);
+      const delta = direction === "credit" ? amountGhs : -amountGhs;
+      const balanceAfter = balanceBefore + delta;
+
+      if (balanceAfter < 0) {
+        return res.status(400).json({
+          error: `Insufficient balance. Available: ₵${balanceBefore.toFixed(2)}`,
+        });
+      }
+
+      await db
+        .update(wallets)
+        .set({ balanceGhs: balanceAfter.toFixed(2), updatedAt: new Date() })
+        .where(eq(wallets.userId, userId));
+
+      await db.insert(walletTransactions).values({
+        userId,
+        type: direction === "credit" ? "adjustment_credit" : "adjustment_debit",
+        amountGhs: amountGhs.toFixed(2),
+        balanceBeforeGhs: balanceBefore.toFixed(2),
+        balanceAfterGhs: balanceAfter.toFixed(2),
+        status: "completed",
+        method: "adjustment",
+        description: `Admin ${direction} — ${reason}`,
+      });
+
+      await logAdminAction(
+        req.user!.userId,
+        direction === "credit" ? "WALLET_CREDIT" : "WALLET_DEBIT",
+        "wallets",
+        userId,
+        { amountGhs, reason, balanceBefore, balanceAfter },
+      );
+
+      res.json({ success: true, balanceBefore, balanceAfter });
+    } catch (error) {
+      console.error("Error adjusting wallet:", error);
+      res.status(500).json({ error: "Failed to adjust wallet" });
+    }
+  },
+);
+
 adminRouter.get("/permissions/scopes", requirePermission("admins.manage"), async (_req, res) => {
   res.json({ scopes: ADMIN_SCOPES });
 });

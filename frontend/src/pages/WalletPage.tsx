@@ -96,6 +96,8 @@ const typeLabels: Record<string, string> = {
   refund: "Refund",
   referral_reward: "Referral Reward",
   reward_claim: "Reward Claim",
+  adjustment_credit: "Credit",
+  adjustment_debit: "Debit",
 };
 
 const typeIcon: Record<string, typeof ArrowDownToLine> = {
@@ -106,7 +108,12 @@ const typeIcon: Record<string, typeof ArrowDownToLine> = {
   refund: RefreshCcw,
   referral_reward: Gift,
   reward_claim: Gift,
+  adjustment_credit: ArrowDownToLine,
+  adjustment_debit: ArrowUpFromLine,
 };
+
+// Transaction types that reduce the wallet balance (shown with a "-").
+const DEBIT_TYPES = new Set(["withdrawal", "investment", "adjustment_debit"]);
 
 function RewardsTabContent({ onClaimed }: { onClaimed: () => void }) {
   const [claimCode, setClaimCode] = useState("");
@@ -613,9 +620,7 @@ export function WalletPage() {
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-semibold text-ink-900">
-                      {tx.type === "withdrawal" || tx.type === "investment"
-                        ? "-"
-                        : "+"}
+                      {DEBIT_TYPES.has(tx.type) ? "-" : "+"}
                       {formatCurrency(
                         convertFromGhs(Number(tx.amountGhs), currency),
                         currency,
@@ -637,9 +642,7 @@ export function WalletPage() {
           <SheetContent title="Transaction details">
             {(() => {
               const Icon = typeIcon[selectedTx.type] ?? WalletIcon;
-              const isCredit = !(
-                selectedTx.type === "withdrawal" || selectedTx.type === "investment"
-              );
+              const isCredit = !DEBIT_TYPES.has(selectedTx.type);
               return (
                 <div className="space-y-5">
                   <div className="flex flex-col items-center gap-2 py-2 text-center">

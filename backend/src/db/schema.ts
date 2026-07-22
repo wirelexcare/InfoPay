@@ -45,6 +45,8 @@ export const walletTxTypeEnum = pgEnum("wallet_tx_type", [
   "refund",
   "referral_reward",
   "reward_claim",
+  "adjustment_credit",
+  "adjustment_debit",
 ]);
 
 export const walletTxStatusEnum = pgEnum("wallet_tx_status", [

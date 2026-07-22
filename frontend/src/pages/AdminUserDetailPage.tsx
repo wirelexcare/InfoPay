@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Ban, CheckCircle2, ShieldPlus, ShieldMinus } from "lucide-react";
+import { ArrowLeft, Ban, CheckCircle2, Minus, Plus, ShieldPlus, ShieldMinus, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 
@@ -60,6 +60,9 @@ export function AdminUserDetailPage() {
   const [showRoleForm, setShowRoleForm] = useState(false);
   const [level, setLevel] = useState<"full" | "limited">("limited");
   const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
+  const [adjAmount, setAdjAmount] = useState("");
+  const [adjReason, setAdjReason] = useState("");
+  const [adjusting, setAdjusting] = useState(false);
 
   const fetchUser = async () => {
     try {
@@ -108,6 +111,35 @@ export function AdminUserDetailPage() {
     }
   };
 
+  const handleWalletAdjust = async (direction: "credit" | "debit") => {
+    const amount = Number(adjAmount);
+    if (!amount || amount <= 0) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+    if (adjReason.trim().length < 3) {
+      toast.error("Enter a reason (at least 3 characters)");
+      return;
+    }
+    try {
+      setAdjusting(true);
+      const { data: res } = await api.post(
+        `/api/admin/users/${userId}/wallet-adjustment`,
+        { direction, amountGhs: adjAmount, reason: adjReason.trim() },
+      );
+      toast.success(
+        `${direction === "credit" ? "Credited" : "Debited"} ₵${amount.toFixed(2)} · new balance ₵${Number(res.balanceAfter).toFixed(2)}`,
+      );
+      setAdjAmount("");
+      setAdjReason("");
+      fetchUser();
+    } catch (error: any) {
+      toast.error(error.response?.data?.error ?? "Failed to adjust wallet");
+    } finally {
+      setAdjusting(false);
+    }
+  };
+
   const handleSaveRole = async () => {
     try {
       setActing(true);
@@ -146,7 +178,7 @@ export function AdminUserDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background p-6">
+      <div className="min-h-screen bg-background p-4 sm:p-6">
         <div className="mx-auto max-w-4xl space-y-4">
           <div className="h-8 w-40 bg-ink-100 rounded animate-pulse" />
           <div className="h-64 bg-ink-100 rounded-lg animate-pulse" />
@@ -157,7 +189,7 @@ export function AdminUserDetailPage() {
 
   if (!data) {
     return (
-      <div className="min-h-screen bg-background p-6">
+      <div className="min-h-screen bg-background p-4 sm:p-6">
         <div className="mx-auto max-w-4xl">
           <p className="text-ink-600">User not found.</p>
         </div>
@@ -170,7 +202,7 @@ export function AdminUserDetailPage() {
   const isFullAdmin = permissions.includes("*");
 
   return (
-    <div className="min-h-screen bg-background p-6">
+    <div className="min-h-screen bg-background p-4 sm:p-6">
       <div className="mx-auto max-w-4xl">
         <button
           onClick={() => navigate("/admin/users")}
@@ -180,7 +212,7 @@ export function AdminUserDetailPage() {
           Back to Users
         </button>
 
-        <div className="rounded-lg border border-border bg-card p-6 mb-6">
+        <div className="rounded-lg border border-border bg-card p-4 sm:p-6 mb-6">
           <div className="flex items-start justify-between flex-wrap gap-3">
             <div>
               <h1 className="text-2xl font-bold text-ink-900">{user.fullName}</h1>
@@ -264,7 +296,72 @@ export function AdminUserDetailPage() {
           )}
         </div>
 
-        <div className="rounded-lg border border-border bg-card p-6 mb-6">
+        <div className="rounded-lg border border-border bg-card p-4 sm:p-6 mb-6">
+          <div className="flex items-center gap-2">
+            <Wallet size={18} className="text-primary" />
+            <h2 className="text-lg font-bold text-ink-900">Wallet adjustment</h2>
+          </div>
+          <p className="mt-1 text-sm text-ink-500">
+            Current balance:{" "}
+            <span className="font-semibold text-ink-900">
+              ₵{parseFloat(wallet?.balanceGhs || "0").toFixed(2)}
+            </span>
+          </p>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="text-xs font-semibold uppercase text-ink-500">
+                Amount (GHS)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                value={adjAmount}
+                onChange={(e) => setAdjAmount(e.target.value)}
+                placeholder="0.00"
+                className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase text-ink-500">
+                Reason
+              </label>
+              <input
+                type="text"
+                value={adjReason}
+                onChange={(e) => setAdjReason(e.target.value)}
+                placeholder="e.g. bonus, correction, refund"
+                className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+            <button
+              onClick={() => handleWalletAdjust("credit")}
+              disabled={adjusting}
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-green-700 disabled:opacity-50"
+            >
+              <Plus size={16} />
+              Credit wallet
+            </button>
+            <button
+              onClick={() => handleWalletAdjust("debit")}
+              disabled={adjusting}
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
+            >
+              <Minus size={16} />
+              Debit wallet
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-ink-400">
+            Every adjustment is recorded in the user's transaction history and the admin audit log.
+          </p>
+        </div>
+
+        <div className="rounded-lg border border-border bg-card p-4 sm:p-6 mb-6">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <h2 className="text-lg font-bold text-ink-900">Admin Access</h2>
@@ -359,7 +456,7 @@ export function AdminUserDetailPage() {
           )}
         </div>
 
-        <div className="rounded-lg border border-border bg-card p-6 mb-6">
+        <div className="rounded-lg border border-border bg-card p-4 sm:p-6 mb-6">
           <h2 className="text-lg font-bold mb-4">
             Investments ({investments.length})
           </h2>

@@ -104,22 +104,37 @@ export function AdminPage() {
 
   return (
     <div className="min-h-[100dvh] bg-background">
-      <header className="border-b border-border bg-card/50">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <h1 className="text-xl font-bold">Admin Dashboard</h1>
+      <header className="sticky top-0 z-20 border-b border-border bg-card/80 backdrop-blur-md">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6">
+          <h1 className="text-lg font-bold sm:text-xl">Admin Dashboard</h1>
           <button
             onClick={handleLogout}
-            className="flex items-center gap-2 rounded-full bg-red-50 px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-100"
+            className="flex items-center gap-2 rounded-full bg-red-50 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-100"
           >
             <LogOut size={16} />
-            Logout
+            <span className="hidden sm:inline">Logout</span>
           </button>
         </div>
+
+        {/* Mobile: horizontal scrolling nav */}
+        <nav className="no-scrollbar flex gap-2 overflow-x-auto px-4 pb-3 lg:hidden">
+          {navItems.map((item) => (
+            <button
+              key={item.to}
+              onClick={() => navigate(item.to)}
+              className="flex shrink-0 items-center gap-2 rounded-full border border-border bg-card px-3.5 py-2 text-xs font-medium text-ink-600 transition hover:border-primary/30 hover:text-primary"
+            >
+              <item.icon size={15} />
+              {item.label}
+            </button>
+          ))}
+        </nav>
       </header>
 
       <div className="flex">
-        <nav className="border-r border-border bg-card/30 w-64 min-h-[calc(100dvh-60px)]">
-          <div className="p-4 space-y-2">
+        {/* Desktop: vertical sidebar */}
+        <nav className="hidden w-64 shrink-0 border-r border-border bg-card/30 lg:block">
+          <div className="sticky top-[61px] space-y-2 p-4">
             {navItems.map((item) => (
               <button
                 key={item.to}
@@ -133,9 +148,9 @@ export function AdminPage() {
           </div>
         </nav>
 
-        <main className="flex-1 p-6">
+        <main className="min-w-0 flex-1 p-4 sm:p-6">
           <div className="mx-auto max-w-7xl">
-            <h2 className="text-2xl font-bold mb-6">Financial Overview</h2>
+            <h2 className="mb-6 text-xl font-bold sm:text-2xl">Financial Overview</h2>
 
             {loading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
