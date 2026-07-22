@@ -682,7 +682,7 @@ adminRouter.get("/packages/:packageId", async (req: AuthedRequest, res) => {
   }
 });
 
-adminRouter.post("/packages", async (req: AuthedRequest, res) => {
+adminRouter.post("/packages", requirePermission("projects.manage"), async (req: AuthedRequest, res) => {
   try {
     const parsed = projectFieldsSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -714,7 +714,7 @@ adminRouter.post("/packages", async (req: AuthedRequest, res) => {
   }
 });
 
-adminRouter.patch("/packages/:packageId", async (req: AuthedRequest, res) => {
+adminRouter.patch("/packages/:packageId", requirePermission("projects.manage"), async (req: AuthedRequest, res) => {
   try {
     const parsed = projectFieldsSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -754,7 +754,7 @@ adminRouter.patch("/packages/:packageId", async (req: AuthedRequest, res) => {
 
 const packageActiveSchema = z.object({ isActive: z.boolean() });
 
-adminRouter.post("/packages/:packageId/active", async (req: AuthedRequest, res) => {
+adminRouter.post("/packages/:packageId/active", requirePermission("projects.manage"), async (req: AuthedRequest, res) => {
   try {
     const parsed = packageActiveSchema.safeParse(req.body);
     if (!parsed.success) {
