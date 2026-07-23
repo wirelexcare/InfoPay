@@ -13,6 +13,7 @@ import { referralsRouter } from "./routes/referrals.js";
 import { cronRouter } from "./routes/cron.js";
 import { announcementsRouter } from "./routes/announcements.js";
 import { supportRouter } from "./routes/support.js";
+import { chatRouter } from "./routes/chat.js";
 
 // An unhandled rejection anywhere in the app (e.g. a payment provider's API
 // timing out) crashes the whole Node process by default since Node 15 —
@@ -48,5 +49,6 @@ app.use("/api/referrals", referralsRouter);
 app.use("/api/cron", cronRouter);
 app.use("/api/announcements", announcementsRouter);
 app.use("/api/support", supportRouter);
+app.use("/api/chat", chatRouter);
 
 export default app;

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
-import { Building2, Gift, Headphones, LayoutDashboard, LogOut, PieChart, Settings } from "lucide-react";
+import { Building2, Gift, Headphones, LayoutDashboard, LogOut, MessageCircle, PieChart, Settings } from "lucide-react";
 import { useAuthStore } from "../lib/store";
 import { api } from "../lib/api";
 import { AnnouncementOverlay } from "./AnnouncementOverlay";
@@ -39,6 +39,36 @@ export function Layout() {
       .catch(() => setHasSupport(false));
   }, []);
 
+  // Unread live-chat messages badge, refreshed on a light poll.
+  const [chatUnread, setChatUnread] = useState(0);
+  useEffect(() => {
+    if (!user) {
+      setChatUnread(0);
+      return;
+    }
+    if (pathname === "/chat") {
+      // The chat page marks messages read itself
+      setChatUnread(0);
+      return;
+    }
+    let cancelled = false;
+    async function fetchUnread() {
+      if (document.visibilityState === "hidden") return;
+      try {
+        const { data } = await api.get("/api/chat/unread");
+        if (!cancelled) setChatUnread(data.count ?? 0);
+      } catch {
+        // ignore; badge just stays stale
+      }
+    }
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [user, pathname]);
+
   function handleLogout() {
     logout();
     navigate("/login");
@@ -70,6 +100,19 @@ export function Layout() {
           </Link>
           {user ? (
             <div className="flex items-center gap-2">
+              <Link
+                to="/chat"
+                className={`relative grid h-9 w-9 place-items-center rounded-full border transition active:scale-95 ${iconBtn}`}
+                aria-label="Live chat"
+                title="Live Chat"
+              >
+                <MessageCircle size={16} />
+                {chatUnread > 0 && (
+                  <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                    {chatUnread > 9 ? "9+" : chatUnread}
+                  </span>
+                )}
+              </Link>
               {hasSupport && (
                 <Link
                   to="/support"

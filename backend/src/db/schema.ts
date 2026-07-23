@@ -11,6 +11,7 @@ import {
   smallint,
   integer,
   uniqueIndex,
+  index,
 } from "drizzle-orm/pg-core";
 
 export const kycStatusEnum = pgEnum("kyc_status", [
@@ -489,6 +490,44 @@ export const announcements = pgTable("announcements", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+export const chatSenderRoleEnum = pgEnum("chat_sender_role", [
+  "user",
+  "admin",
+  "system",
+]);
+
+export const chatMessages = pgTable(
+  "chat_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Thread owner: always the investor's userId, even for admin/system messages
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // Actual author (admin's id for admin messages; null for system messages)
+    senderId: uuid("sender_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    senderRole: chatSenderRoleEnum("sender_role").notNull(),
+    body: text("body"),
+    imageUrl: text("image_url"),
+    // When set, the message renders as a top-up request card
+    manualDepositId: uuid("manual_deposit_id").references(
+      () => manualDeposits.id,
+      { onDelete: "set null" },
+    ),
+    readByUser: boolean("read_by_user").notNull().default(false),
+    readByAdmin: boolean("read_by_admin").notNull().default(false),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    userCreatedIdx: index("chat_messages_user_created_idx").on(
+      t.userId,
+      t.createdAt,
+    ),
+  }),
+);
 
 export const supportSettings = pgTable("support_settings", {
   id: uuid("id").primaryKey().defaultRandom(),

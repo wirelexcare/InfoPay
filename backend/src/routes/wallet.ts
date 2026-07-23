@@ -14,6 +14,7 @@ import {
   rewardClaims,
   rewardPoolAudit,
   auditLogs,
+  chatMessages,
 } from "../db/schema.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
 import {
@@ -415,6 +416,17 @@ walletRouter.post(
           screenshotUrl,
         })
         .returning();
+
+      // Post the top-up request into the user's live chat thread so admins
+      // see it in the conversation and the user can track its status there.
+      await db.insert(chatMessages).values({
+        userId: req.user!.userId,
+        senderId: req.user!.userId,
+        senderRole: "user",
+        manualDepositId: deposit.id,
+        readByUser: true,
+      });
+
       res.status(201).json({ deposit });
     } catch (error: any) {
       if (error?.code === "23505") {

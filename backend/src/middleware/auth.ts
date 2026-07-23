@@ -51,6 +51,7 @@ export const ADMIN_SCOPES = [
   "rewards.manage",
   "announcements.manage",
   "support.manage",
+  "chats.manage",
 ] as const;
 
 export type AdminScope = (typeof ADMIN_SCOPES)[number];

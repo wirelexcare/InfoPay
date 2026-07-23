@@ -16,6 +16,7 @@ import {
   Trophy,
   Megaphone,
   Headphones,
+  MessageSquare,
 } from "lucide-react";
 
 interface DashboardData {
@@ -105,6 +106,7 @@ export function AdminPage() {
     { label: "Reward Pools", icon: Trophy, to: "/admin/rewards" },
     { label: "Announcements", icon: Megaphone, to: "/admin/announcements" },
     { label: "Support Links", icon: Headphones, to: "/admin/support" },
+    { label: "Live Chats", icon: MessageSquare, to: "/admin/chats" },
   ];
 
   return (

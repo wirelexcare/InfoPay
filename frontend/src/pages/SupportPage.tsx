@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, Headphones, MessageCircle, Send, Users } from "lucide-react";
 import { api } from "../lib/api";
 import { Card } from "../components/ui/card";
@@ -49,6 +49,21 @@ export function SupportPage() {
           Reach our team on any of the channels below.
         </p>
       </div>
+
+      <Link
+        to="/chat"
+        className="flex items-center gap-3 rounded-2xl border border-primary/30 bg-primary/5 p-4 shadow-soft transition active:scale-[0.98] hover:border-primary/50"
+      >
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+          <MessageCircle size={20} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-bold text-ink-900">Live Chat</p>
+          <p className="truncate text-xs text-ink-500">
+            Chat with our team, top-ups, questions, anything
+          </p>
+        </div>
+      </Link>
 
       {loading ? (
         <div className="space-y-3">

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -199,6 +199,7 @@ function RewardsTabContent({ onClaimed }: { onClaimed: () => void }) {
 }
 
 export function WalletPage() {
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const isGhana = user?.country === "GH";
   const currency = user?.preferredCurrency ?? "GHS";
@@ -338,9 +339,10 @@ export function WalletPage() {
         senderNumber: momoForm.senderNumber,
         screenshotUrl: momoForm.screenshotUrl,
       });
-      toast.success("Submitted — we'll review and credit your wallet shortly");
+      toast.success("Submitted, track it in live chat");
       setMomoSheet(null);
       setDepositAmount("");
+      navigate("/chat");
     } catch (err: any) {
       toast.error(err.response?.data?.error ?? "Failed to submit deposit");
     } finally {

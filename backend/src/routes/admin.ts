@@ -1,6 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
-import { eq, gte, and, asc, desc, sql, or, ilike } from "drizzle-orm";
+import { eq, gt, gte, and, asc, desc, sql, or, ilike, inArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { db } from "../db/index.js";
@@ -26,6 +26,7 @@ import {
   rewardPoolAudit,
   announcements,
   supportSettings,
+  chatMessages,
 } from "../db/schema.js";
 import {
   requireAuth,
@@ -36,7 +37,7 @@ import {
   type AuthedRequest,
 } from "../middleware/auth.js";
 import { runDailyRoiAccrual } from "../lib/roiAccrual.js";
-import { uploadProjectImage } from "../lib/storage.js";
+import { uploadProjectImage, uploadPaymentScreenshot } from "../lib/storage.js";
 import { generateRewardPoolCode } from "../lib/rewardPoolCode.js";
 
 const upload = multer({
@@ -1789,6 +1790,15 @@ adminRouter.post(
         { amountGhs: amount, reference: deposit.reference },
       );
 
+      // Notify the user in their live chat thread
+      await db.insert(chatMessages).values({
+        userId: deposit.userId,
+        senderRole: "system",
+        manualDepositId: depositId,
+        body: `Your deposit of GHS ${amount.toFixed(2)} (ref ${deposit.reference}) was approved and your wallet has been credited.`,
+        readByAdmin: true,
+      });
+
       res.json({ success: true, balanceAfter });
     } catch (error) {
       console.error("Error approving manual deposit:", error);
@@ -1841,6 +1851,15 @@ adminRouter.post(
         depositId,
         { reason: parsed.data.reason },
       );
+
+      // Notify the user in their live chat thread
+      await db.insert(chatMessages).values({
+        userId: deposit.userId,
+        senderRole: "system",
+        manualDepositId: depositId,
+        body: `Your deposit of GHS ${Number(deposit.amountGhs).toFixed(2)} (ref ${deposit.reference}) was rejected: ${parsed.data.reason}`,
+        readByAdmin: true,
+      });
 
       res.json({ success: true });
     } catch (error) {
@@ -2298,6 +2317,263 @@ adminRouter.put(
     } catch (error) {
       console.error("Error updating support settings:", error);
       res.status(500).json({ error: "Failed to update support settings" });
+    }
+  },
+);
+
+// ============ LIVE CHATS ============
+
+// Deposits linked to a user's chat, joined live so top-up cards always
+// reflect the current review status.
+async function getChatDepositsForUser(userId: string) {
+  return db
+    .select({
+      id: manualDeposits.id,
+      reference: manualDeposits.reference,
+      amountGhs: manualDeposits.amountGhs,
+      status: manualDeposits.status,
+      rejectionReason: manualDeposits.rejectionReason,
+      screenshotUrl: manualDeposits.screenshotUrl,
+    })
+    .from(manualDeposits)
+    .where(eq(manualDeposits.userId, userId))
+    .orderBy(desc(manualDeposits.createdAt))
+    .limit(50);
+}
+
+adminRouter.get(
+  "/chats",
+  requirePermission("chats.manage"),
+  async (_req: AuthedRequest, res) => {
+    try {
+      const convos = await db
+        .select({
+          userId: chatMessages.userId,
+          lastMessageAt: sql<string>`max(${chatMessages.createdAt})`,
+          unreadCount: sql<number>`count(*) filter (where ${chatMessages.senderRole} = 'user' and ${chatMessages.readByAdmin} = false)`,
+        })
+        .from(chatMessages)
+        .groupBy(chatMessages.userId)
+        .orderBy(sql`max(${chatMessages.createdAt}) desc`)
+        .limit(100);
+
+      if (convos.length === 0) {
+        return res.json({ data: [] });
+      }
+
+      const userIds = convos.map((c) => c.userId);
+      const [convoUsers, recentMessages] = await Promise.all([
+        db
+          .select({
+            id: users.id,
+            fullName: users.fullName,
+            phone: users.phone,
+          })
+          .from(users)
+          .where(inArray(users.id, userIds)),
+        db
+          .select()
+          .from(chatMessages)
+          .where(inArray(chatMessages.userId, userIds))
+          .orderBy(desc(chatMessages.createdAt))
+          .limit(300),
+      ]);
+
+      const userMap = new Map(convoUsers.map((u) => [u.id, u]));
+      // First message per user in the desc-ordered list = latest message
+      const latestByUser = new Map<string, (typeof recentMessages)[number]>();
+      for (const msg of recentMessages) {
+        if (!latestByUser.has(msg.userId)) latestByUser.set(msg.userId, msg);
+      }
+
+      const data = convos.map((c) => {
+        const u = userMap.get(c.userId);
+        const last = latestByUser.get(c.userId);
+        let preview = last?.body ?? "";
+        if (!preview && last?.imageUrl) preview = "Image";
+        if (!preview && last?.manualDepositId) preview = "Top-up request";
+        return {
+          userId: c.userId,
+          userFullName: u?.fullName ?? "Unknown",
+          userPhone: u?.phone ?? "",
+          lastMessageAt: c.lastMessageAt,
+          lastMessagePreview: preview,
+          unreadCount: Number(c.unreadCount),
+        };
+      });
+
+      res.json({ data });
+    } catch (error) {
+      console.error("Error fetching chats:", error);
+      res.status(500).json({ error: "Failed to fetch chats" });
+    }
+  },
+);
+
+adminRouter.get(
+  "/chats/unread",
+  requirePermission("chats.manage"),
+  async (_req: AuthedRequest, res) => {
+    try {
+      const [row] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(chatMessages)
+        .where(
+          and(
+            eq(chatMessages.senderRole, "user"),
+            eq(chatMessages.readByAdmin, false),
+          ),
+        );
+      res.json({ count: Number(row?.count ?? 0) });
+    } catch (error) {
+      console.error("Error fetching chat unread count:", error);
+      res.status(500).json({ error: "Failed to fetch unread count" });
+    }
+  },
+);
+
+adminRouter.get(
+  "/chats/:userId/messages",
+  requirePermission("chats.manage"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const { userId } = req.params;
+      const after =
+        typeof req.query.after === "string" ? new Date(req.query.after) : null;
+
+      const conditions =
+        after && !Number.isNaN(after.getTime())
+          ? and(eq(chatMessages.userId, userId), gt(chatMessages.createdAt, after))
+          : eq(chatMessages.userId, userId);
+
+      const [messages, deposits, [user]] = await Promise.all([
+        db
+          .select()
+          .from(chatMessages)
+          .where(conditions)
+          .orderBy(asc(chatMessages.createdAt))
+          .limit(200),
+        getChatDepositsForUser(userId),
+        db
+          .select({
+            id: users.id,
+            fullName: users.fullName,
+            phone: users.phone,
+          })
+          .from(users)
+          .where(eq(users.id, userId))
+          .limit(1),
+      ]);
+
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      res.json({ messages, deposits, user });
+    } catch (error) {
+      console.error("Error fetching chat messages:", error);
+      res.status(500).json({ error: "Failed to fetch messages" });
+    }
+  },
+);
+
+const adminSendMessageSchema = z
+  .object({
+    body: z.string().trim().min(1).max(2000).optional(),
+    imageUrl: z.string().url().optional(),
+  })
+  .refine((data) => data.body || data.imageUrl, {
+    message: "Message must have text or an image",
+  });
+
+adminRouter.post(
+  "/chats/:userId/messages",
+  requirePermission("chats.manage"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const { userId } = req.params;
+      const parsed = adminSendMessageSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+      }
+
+      const [user] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const [message] = await db
+        .insert(chatMessages)
+        .values({
+          userId,
+          senderId: req.user!.userId,
+          senderRole: "admin",
+          body: parsed.data.body ?? null,
+          imageUrl: parsed.data.imageUrl ?? null,
+          readByAdmin: true,
+        })
+        .returning();
+
+      await logAdminAction(
+        req.user!.userId,
+        "CHAT_MESSAGE_SENT",
+        "chat_messages",
+        message.id,
+        { targetUserId: userId },
+      );
+
+      res.status(201).json({ message });
+    } catch (error) {
+      console.error("Error sending chat message:", error);
+      res.status(500).json({ error: "Failed to send message" });
+    }
+  },
+);
+
+adminRouter.post(
+  "/chats/:userId/read",
+  requirePermission("chats.manage"),
+  async (req: AuthedRequest, res) => {
+    try {
+      await db
+        .update(chatMessages)
+        .set({ readByAdmin: true })
+        .where(
+          and(
+            eq(chatMessages.userId, req.params.userId),
+            eq(chatMessages.readByAdmin, false),
+          ),
+        );
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error marking chat read:", error);
+      res.status(500).json({ error: "Failed to mark as read" });
+    }
+  },
+);
+
+adminRouter.post(
+  "/chats/upload",
+  requirePermission("chats.manage"),
+  upload.single("image"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file) {
+      return res.status(400).json({ error: "No image file provided" });
+    }
+    try {
+      const url = await uploadPaymentScreenshot(
+        req.file.buffer,
+        req.file.mimetype,
+        req.file.originalname,
+      );
+      res.json({ url });
+    } catch (error) {
+      console.error("Error uploading chat image:", error);
+      res.status(500).json({ error: "Failed to upload image" });
     }
   },
 );
