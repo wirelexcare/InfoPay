@@ -115,6 +115,14 @@ const typeIcon: Record<string, typeof ArrowDownToLine> = {
 // Transaction types that reduce the wallet balance (shown with a "-").
 const DEBIT_TYPES = new Set(["withdrawal", "investment", "adjustment_debit"]);
 
+const CLAIM_ERROR_MESSAGES: Record<string, string> = {
+  pool_not_found: "Reward code not found",
+  pool_inactive: "This reward pool is no longer active",
+  pool_expired: "This reward pool has expired",
+  already_claimed: "You've already claimed from this reward pool",
+  insufficient_pool: "Total reward amount claimed. Try again with the next provided code",
+};
+
 function RewardsTabContent({ onClaimed }: { onClaimed: () => void }) {
   const [claimCode, setClaimCode] = useState("");
   const [claiming, setClaiming] = useState(false);
@@ -142,20 +150,19 @@ function RewardsTabContent({ onClaimed }: { onClaimed: () => void }) {
         setClaimCode("");
         onClaimed();
       } else {
-        const messages: Record<string, string> = {
-          pool_not_found: "Reward code not found",
-          pool_inactive: "This reward pool is no longer active",
-          pool_expired: "This reward pool has expired",
-          already_claimed: "You've already claimed from this reward pool",
-          insufficient_pool: "Total reward amount claimed. Try again with the next provided code",
-        };
-        toast.error(messages[res.data.status] || "Failed to claim reward");
+        toast.error(CLAIM_ERROR_MESSAGES[res.data.status] || "Failed to claim reward");
         setLastClaimResult({ status: res.data.status });
       }
     } catch (error: any) {
-      const message = error.response?.data?.error || "Failed to claim reward";
+      // 400/404/409 responses land here, so map their status/message too
+      const data = error.response?.data;
+      const message =
+        (data?.status && CLAIM_ERROR_MESSAGES[data.status]) ||
+        data?.message ||
+        (typeof data?.error === "string" ? data.error : null) ||
+        "Failed to claim reward";
       toast.error(message);
-      setLastClaimResult({ status: "error" });
+      setLastClaimResult({ status: data?.status ?? "error" });
     } finally {
       setClaiming(false);
     }
