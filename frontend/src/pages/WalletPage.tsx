@@ -287,6 +287,22 @@ export function WalletPage() {
     return parts.join(" · ");
   }
 
+  // Every deposit path (momo, crypto, and the chat-assisted request) must
+  // respect the same admin-configured min/max — the chat path in particular
+  // just posts free text with no server-side amount check, so this is the
+  // only thing stopping an out-of-range top-up request from being submitted.
+  function validateDepositAmount(amount: number): string | null {
+    if (!(amount > 0)) return "Enter a valid amount";
+    if (!paymentRules) return null;
+    if (paymentRules.minDepositGhs !== null && amount < paymentRules.minDepositGhs) {
+      return `Minimum deposit is GHS ${paymentRules.minDepositGhs.toFixed(2)}`;
+    }
+    if (paymentRules.maxDepositGhs !== null && amount > paymentRules.maxDepositGhs) {
+      return `Maximum deposit is GHS ${paymentRules.maxDepositGhs.toFixed(2)}`;
+    }
+    return null;
+  }
+
   const [withdrawType, setWithdrawType] = useState<"momo" | "bank" | "crypto">(
     "momo",
   );
@@ -354,6 +370,11 @@ export function WalletPage() {
 
   async function handleDeposit(e: FormEvent) {
     e.preventDefault();
+    const validationError = validateDepositAmount(Number(depositAmount));
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
     setDepositLoading(true);
     try {
       if (depositMethod === "crypto") {
