@@ -7,8 +7,8 @@ import {
   CheckCircle2,
   Coins,
   Gift,
+  Info,
   Loader2,
-  PieChart,
   Plus,
   ShieldAlert,
   Smartphone,
@@ -88,7 +88,7 @@ const QUICK_ACTIONS: {
   { to: "/packages", label: "Invest", icon: Building2, tile: "bg-sky-100", fg: "text-sky-600" },
   { to: "/wallet", label: "Add money", icon: ArrowDownToLine, tile: "bg-emerald-100", fg: "text-emerald-600" },
   { to: "/wallet", label: "Withdraw", icon: ArrowUpFromLine, tile: "bg-amber-100", fg: "text-amber-600" },
-  { to: "/portfolio", label: "Portfolio", icon: PieChart, tile: "bg-violet-100", fg: "text-violet-600" },
+  { to: "/about", label: "About us", icon: Info, tile: "bg-violet-100", fg: "text-violet-600" },
   { to: "/referrals", label: "Refer & earn", icon: Gift, tile: "bg-rose-100", fg: "text-rose-600" },
   { to: "/wallet", label: "Rewards", icon: Trophy, tile: "bg-indigo-100", fg: "text-indigo-600" },
 ];

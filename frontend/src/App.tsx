@@ -32,6 +32,7 @@ import { AdminDepositDetailPage } from "./pages/AdminDepositDetailPage";
 import { AdminRewardsPage } from "./pages/AdminRewardsPage";
 import { AdminRewardDetailPage } from "./pages/AdminRewardDetailPage";
 import { AdminAnnouncementsPage } from "./pages/AdminAnnouncementsPage";
+import { AboutPage } from "./pages/AboutPage";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const user = useAuthStore((s) => s.user);
@@ -55,6 +56,7 @@ export default function App() {
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/packages" element={<PackagesPage />} />
         <Route path="/packages/:id" element={<PackageDetailPage />} />
+        <Route path="/about" element={<AboutPage />} />
         <Route
           path="/kyc"
           element={
