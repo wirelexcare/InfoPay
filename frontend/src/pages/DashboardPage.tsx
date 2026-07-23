@@ -100,6 +100,7 @@ export function DashboardPage() {
   const firstName = user?.fullName?.split(" ")[0] ?? "there";
 
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
+  const [balanceGhs, setBalanceGhs] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const [methods, setMethods] = useState<WithdrawalMethod[]>([]);
@@ -115,10 +116,15 @@ export function DashboardPage() {
   const [verifyError, setVerifyError] = useState<string | null>(null);
 
   useEffect(() => {
-    api
-      .get("/api/users/me/portfolio")
-      .then(({ data }) => setPortfolio(data.portfolio))
-      .finally(() => setLoading(false));
+    Promise.all([
+      api
+        .get("/api/users/me/portfolio")
+        .then(({ data }) => setPortfolio(data.portfolio)),
+      api
+        .get("/api/wallet")
+        .then(({ data }) => setBalanceGhs(Number(data.wallet?.balanceGhs ?? 0)))
+        .catch(() => {}),
+    ]).finally(() => setLoading(false));
   }, []);
 
   function loadMethods() {
@@ -219,22 +225,19 @@ export function DashboardPage() {
           <Skeleton className="h-20 w-56 rounded-xl bg-white/20" />
         ) : (
           <div>
-            <p className="text-sm text-white/70">Total invested</p>
+            <p className="text-sm text-white/70">Available balance</p>
             <p className="mt-1 text-[2.75rem] font-extrabold leading-none tracking-tight">
-              {formatCurrency(
-                convertFromGhs(Number(portfolio?.totalInvestedGhs ?? 0), currency),
-                currency,
-              )}
+              {formatCurrency(convertFromGhs(balanceGhs, currency), currency)}
             </p>
             <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-sm">
               <TrendingUp size={15} />
               <span className="font-semibold">
                 {formatCurrency(
-                  convertFromGhs(Number(portfolio?.totalReturnsGhs ?? 0), currency),
+                  convertFromGhs(Number(portfolio?.totalInvestedGhs ?? 0), currency),
                   currency,
                 )}
               </span>
-              <span className="text-white/70">in returns</span>
+              <span className="text-white/70">invested</span>
             </div>
           </div>
         )}
