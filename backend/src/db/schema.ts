@@ -10,6 +10,7 @@ import {
   pgEnum,
   smallint,
   integer,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 export const kycStatusEnum = pgEnum("kyc_status", [
@@ -354,7 +355,14 @@ export const referralRewards = pgTable("referral_rewards", {
   }).notNull(),
   status: referralRewardStatusEnum("status").notNull().default("credited"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (t) => ({
+  // One reward per investment per referral level — required by the
+  // onConflictDoNothing target in creditReferralRewards.
+  investmentLevelUnique: uniqueIndex("referral_rewards_investment_level_unique").on(
+    t.investmentId,
+    t.level,
+  ),
+}));
 
 export const referralConfig = pgTable("referral_config", {
   id: uuid("id").primaryKey().defaultRandom(),
