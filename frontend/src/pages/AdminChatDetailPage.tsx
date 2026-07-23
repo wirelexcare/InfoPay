@@ -25,11 +25,6 @@ interface ChatUser {
   phone: string;
 }
 
-interface MomoSettings {
-  network: string;
-  accountName: string;
-  accountNumber: string;
-}
 
 const DEPOSIT_STATUS_STYLES: Record<ChatDeposit["status"], string> = {
   pending: "bg-amber-100 text-amber-700",
@@ -54,15 +49,6 @@ export function AdminChatDetailPage() {
   const [actingDepositId, setActingDepositId] = useState<string | null>(null);
   const [rejectingDeposit, setRejectingDeposit] = useState<ChatDeposit | null>(null);
   const [rejectReason, setRejectReason] = useState("");
-
-  // Receiving MoMo account, used by the payment-instructions template
-  const [momoSettings, setMomoSettings] = useState<MomoSettings | null>(null);
-  useEffect(() => {
-    api
-      .get("/api/admin/deposit-settings")
-      .then(({ data }) => setMomoSettings(data.data ?? null))
-      .catch(() => {});
-  }, []);
 
   // Credit wallet dialog state
   const [creditOpen, setCreditOpen] = useState(false);
@@ -265,31 +251,45 @@ export function AdminChatDetailPage() {
 
   // Canned replies for the top-up flow; clicking fills the composer so the
   // admin can edit before sending.
+  // The phone number the user asked to be reached on, falling back to their
+  // account number.
+  function findRequestedPhone() {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.senderRole === "user" && m.body) {
+        const match = m.body.match(/reach me on\s*(\+?[\d\s-]{7,})/i);
+        if (match) return match[1].trim();
+      }
+    }
+    return chatUser?.phone ?? "your number";
+  }
+
+  // Canned replies for the top-up flow; clicking fills the composer so the
+  // admin can edit before sending. The money moves via a MoMo debit prompt
+  // the admin initiates to the user's number: the user allows cashout,
+  // the admin sends the prompt, and the user approves it with their PIN.
   function buildTemplates() {
     const amount = findRequestedAmount();
     const amountText = amount ? `GHS ${amount}` : "the amount";
-    const templates: { label: string; text: string }[] = [];
-    if (momoSettings) {
-      templates.push({
-        label: "Payment instructions",
-        text: `To top up ${amountText}, please send the payment to ${momoSettings.network.toUpperCase()} ${momoSettings.accountNumber} (${momoSettings.accountName}), then share your payment screenshot here in this chat.`,
-      });
-    }
-    templates.push(
+    const phone = findRequestedPhone();
+    return [
       {
-        label: "Request screenshot",
-        text: "Please send your payment screenshot here in the chat so we can confirm your top-up.",
+        label: "Allow cashout",
+        text: `To complete your top-up of ${amountText}, please allow cashout on your mobile money account. We will then send a payment prompt to ${phone}. Approve the prompt with your PIN and your wallet will be credited once the payment is confirmed.`,
       },
       {
-        label: "Payment received",
-        text: "We've received your payment and are confirming it now. Your wallet will be credited shortly.",
+        label: "Prompt sent",
+        text: `We've sent the payment prompt of ${amountText} to ${phone}. Please approve it with your PIN to complete the payment.`,
+      },
+      {
+        label: "Request screenshot",
+        text: "Please send a screenshot of the payment confirmation here in the chat so we can verify it.",
       },
       {
         label: "Wallet credited",
         text: `Your wallet has been credited with ${amountText}. Thank you!`,
       },
-    );
-    return templates;
+    ];
   }
 
   async function handleCredit(e: FormEvent) {
