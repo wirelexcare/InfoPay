@@ -17,6 +17,7 @@ interface Investment {
   createdAt: string;
   projectTitle: string;
   projectImageUrl: string | null;
+  hasClaimableRoi: boolean;
 }
 
 const statusVariant: Record<string, "default" | "muted" | "destructive"> = {
@@ -105,6 +106,11 @@ export function PortfolioPage() {
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
+                  {inv.hasClaimableRoi && (
+                    <span className="animate-pulse rounded-full bg-primary px-2.5 py-1 text-[10px] font-bold text-primary-foreground">
+                      ROI ready
+                    </span>
+                  )}
                   <Badge variant={statusVariant[inv.status] ?? "muted"}>
                     {statusLabels[inv.status] ?? inv.status}
                   </Badge>

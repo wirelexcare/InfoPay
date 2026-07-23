@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, Calendar, Coins, TrendingUp } from "lucide-react";
+import { ArrowLeft, Calendar, Coins, Gift, Loader2, TrendingUp } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "../lib/api";
 import { useAuthStore } from "../lib/store";
 import { convertFromGhs, formatCurrency } from "../lib/currency";
@@ -24,6 +25,34 @@ interface Project {
   durationDays: string;
   imageUrl: string | null;
 }
+
+interface ClaimablePayout {
+  id: string;
+  amountGhs: string;
+  scheduledFor: string;
+}
+
+interface RoiEntry {
+  id: string;
+  amountGhs: string;
+  status: "scheduled" | "paid" | "failed" | "forfeited";
+  scheduledFor: string;
+  paidAt: string | null;
+}
+
+const ROI_STATUS_STYLES: Record<string, string> = {
+  scheduled: "bg-amber-100 text-amber-700",
+  paid: "bg-green-100 text-green-700",
+  forfeited: "bg-red-100 text-red-600",
+  failed: "bg-red-100 text-red-600",
+};
+
+const ROI_STATUS_LABELS: Record<string, string> = {
+  scheduled: "Ready to claim",
+  paid: "Claimed",
+  forfeited: "Forfeited",
+  failed: "Failed",
+};
 
 const statusVariant: Record<string, "default" | "muted" | "destructive"> = {
   pending: "default",
@@ -53,18 +82,41 @@ export function InvestmentDetailPage() {
   const [investment, setInvestment] = useState<Investment | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [totalEarnedGhs, setTotalEarnedGhs] = useState("0");
+  const [claimable, setClaimable] = useState<ClaimablePayout | null>(null);
+  const [roiHistory, setRoiHistory] = useState<RoiEntry[]>([]);
+  const [claiming, setClaiming] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  function load() {
+    return api.get(`/api/investments/${id}`).then(({ data }) => {
+      setInvestment(data.investment);
+      setProject(data.project);
+      setTotalEarnedGhs(data.totalEarnedGhs);
+      setClaimable(data.claimablePayout ?? null);
+      setRoiHistory(data.roiHistory ?? []);
+    });
+  }
+
   useEffect(() => {
-    api
-      .get(`/api/investments/${id}`)
-      .then(({ data }) => {
-        setInvestment(data.investment);
-        setProject(data.project);
-        setTotalEarnedGhs(data.totalEarnedGhs);
-      })
-      .finally(() => setLoading(false));
+    load().finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  async function handleClaim() {
+    if (!claimable) return;
+    setClaiming(true);
+    try {
+      const { data } = await api.post(`/api/investments/${id}/claim-roi`);
+      toast.success(`Claimed ₵${data.claimedGhs}! Added to your available balance.`);
+      await load();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error ?? "Failed to claim ROI");
+      // Refresh so an expired/already-claimed payout disappears
+      await load().catch(() => {});
+    } finally {
+      setClaiming(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -127,6 +179,41 @@ export function InvestmentDetailPage() {
         </p>
       </div>
 
+      {claimable && (
+        <Card className="border-primary/30 bg-primary/5 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary">
+                <Gift size={20} />
+              </span>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">
+                  Today's ROI
+                </p>
+                <p className="text-xl font-extrabold tracking-tight text-ink-900">
+                  {formatCurrency(
+                    convertFromGhs(Number(claimable.amountGhs), currency),
+                    currency,
+                  )}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleClaim}
+              disabled={claiming}
+              className="flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground transition active:scale-95 disabled:opacity-50"
+            >
+              {claiming && <Loader2 size={14} className="animate-spin" />}
+              {claiming ? "Claiming..." : "Claim"}
+            </button>
+          </div>
+          <p className="mt-3 text-[11px] leading-relaxed text-ink-400">
+            Claim today's return to add it to your available balance. Unclaimed
+            returns expire when the next day begins.
+          </p>
+        </Card>
+      )}
+
       <div className="grid grid-cols-2 gap-3">
         <Card className="p-4">
           <TrendingUp size={16} className="text-primary" />
@@ -181,11 +268,46 @@ export function InvestmentDetailPage() {
         </div>
       </Card>
 
+      {roiHistory.length > 0 && (
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-sm font-bold text-ink-900">
+            <Coins size={16} className="text-primary" />
+            ROI log
+          </div>
+          <div className="mt-2 divide-y divide-border/60">
+            {roiHistory.map((entry) => (
+              <div
+                key={entry.id}
+                className="flex items-center justify-between gap-2 py-2.5"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-ink-900">
+                    {formatCurrency(
+                      convertFromGhs(Number(entry.amountGhs), currency),
+                      currency,
+                    )}
+                  </p>
+                  <p className="text-[11px] text-ink-400">
+                    {new Date(entry.scheduledFor).toLocaleDateString()}
+                  </p>
+                </div>
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${ROI_STATUS_STYLES[entry.status] ?? "bg-ink-100 text-ink-600"}`}
+                >
+                  {ROI_STATUS_LABELS[entry.status] ?? entry.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       <p className="text-xs leading-relaxed text-ink-400">
         Daily return is an estimate based on the package's target return
-        spread evenly across its duration — it is not a guaranteed payout.
-        "Earned so far" reflects only returns actually paid out to your
-        wallet.
+        spread evenly across its duration. Each day's return must be claimed
+        from this page to be added to your available balance; unclaimed
+        returns are forfeited when the next day begins. "Earned so far"
+        reflects only returns you have claimed.
       </p>
     </div>
   );

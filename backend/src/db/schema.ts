@@ -33,6 +33,7 @@ export const payoutStatusEnum = pgEnum("payout_status", [
   "scheduled",
   "paid",
   "failed",
+  "forfeited",
 ]);
 
 export const paymentProviderEnum = pgEnum("payment_provider", [
