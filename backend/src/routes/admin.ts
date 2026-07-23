@@ -27,6 +27,7 @@ import {
   rewardPoolAudit,
   announcements,
   supportSettings,
+  paymentSettings,
   chatMessages,
 } from "../db/schema.js";
 import {
@@ -38,6 +39,7 @@ import {
   type AuthedRequest,
 } from "../middleware/auth.js";
 import { runDailyRoiAccrual } from "../lib/roiAccrual.js";
+import { getPaymentRules } from "../lib/paymentSettings.js";
 import { uploadProjectImage, uploadPaymentScreenshot } from "../lib/storage.js";
 import { generateRewardPoolCode } from "../lib/rewardPoolCode.js";
 
@@ -91,7 +93,7 @@ async function logAdminAction(
 
 // ============ USERS ============
 
-adminRouter.get("/users", async (req: AuthedRequest, res) => {
+adminRouter.get("/users", requirePermission("users.manage"), async (req: AuthedRequest, res) => {
   try {
     const search = (req.query.search as string) || "";
     const kycStatus = (req.query.kycStatus as string) || "";
@@ -134,7 +136,7 @@ adminRouter.get("/users", async (req: AuthedRequest, res) => {
   }
 });
 
-adminRouter.get("/users/:userId", async (req: AuthedRequest, res) => {
+adminRouter.get("/users/:userId", requirePermission("users.manage"), async (req: AuthedRequest, res) => {
   try {
     const { userId } = req.params;
     const [user] = await db
@@ -195,6 +197,26 @@ adminRouter.post("/users/:userId/suspend", requirePermission("users.manage"), as
   try {
     const { userId } = req.params;
     const { reason } = req.body;
+
+    if (userId === req.user!.userId) {
+      return res.status(400).json({ error: "You cannot suspend yourself" });
+    }
+
+    // Never let one admin suspend another admin (and lock out the platform);
+    // an admin must be demoted before they can be suspended.
+    const [target] = await db
+      .select({ role: users.role })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    if (!target) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    if (target.role === "admin") {
+      return res
+        .status(400)
+        .json({ error: "Demote this admin before suspending them" });
+    }
 
     await db
       .update(users)
@@ -331,6 +353,12 @@ adminRouter.post(
       }
       const { level, permissions } = parsed.data;
 
+      if (userId === req.user!.userId) {
+        return res.status(400).json({
+          error: "You cannot change your own admin access",
+        });
+      }
+
       const [target] = await db.select().from(users).where(eq(users.id, userId));
       if (!target) {
         return res.status(404).json({ error: "User not found" });
@@ -398,7 +426,7 @@ adminRouter.post(
 
 // ============ KYC ============
 
-adminRouter.get("/kyc/pending", async (req: AuthedRequest, res) => {
+adminRouter.get("/kyc/pending", requirePermission("kyc.manage"), async (req: AuthedRequest, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = 50;
@@ -867,7 +895,7 @@ adminRouter.post("/packages/:packageId/active", requirePermission("projects.mana
 
 // ============ FINANCIALS ============
 
-adminRouter.get("/financials/dashboard", async (req: AuthedRequest, res) => {
+adminRouter.get("/financials/dashboard", requirePermission("payments.manage"), async (req: AuthedRequest, res) => {
   try {
     const investedResult = await db
       .select({
@@ -924,7 +952,7 @@ adminRouter.get("/financials/dashboard", async (req: AuthedRequest, res) => {
 
 // ============ PAYMENTS & CRYPTO ============
 
-adminRouter.get("/payments/crypto", async (req: AuthedRequest, res) => {
+adminRouter.get("/payments/crypto", requirePermission("payments.manage"), async (req: AuthedRequest, res) => {
   try {
     const status = (req.query.status as string) || "";
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
@@ -953,7 +981,7 @@ adminRouter.get("/payments/crypto", async (req: AuthedRequest, res) => {
   }
 });
 
-adminRouter.get("/payments/crypto/:paymentId", async (req: AuthedRequest, res) => {
+adminRouter.get("/payments/crypto/:paymentId", requirePermission("payments.manage"), async (req: AuthedRequest, res) => {
   try {
     const [payment] = await db
       .select()
@@ -993,7 +1021,7 @@ adminRouter.get("/payments/crypto/:paymentId", async (req: AuthedRequest, res) =
 
 // ============ WITHDRAWALS ============
 
-adminRouter.get("/withdrawals/pending", async (req: AuthedRequest, res) => {
+adminRouter.get("/withdrawals/pending", requirePermission("withdrawals.manage"), async (req: AuthedRequest, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = 50;
@@ -1044,7 +1072,7 @@ adminRouter.get("/withdrawals/pending", async (req: AuthedRequest, res) => {
   }
 });
 
-adminRouter.get("/withdrawals/:txnId", async (req: AuthedRequest, res) => {
+adminRouter.get("/withdrawals/:txnId", requirePermission("withdrawals.manage"), async (req: AuthedRequest, res) => {
   try {
     const [txn] = await db
       .select()
@@ -1161,7 +1189,7 @@ adminRouter.post("/run-daily-roi", async (req: AuthedRequest, res) => {
   }
 });
 
-adminRouter.get("/audit-logs", async (req: AuthedRequest, res) => {
+adminRouter.get("/audit-logs", requirePermission("admins.manage"), async (req: AuthedRequest, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = 50;
@@ -1208,7 +1236,7 @@ function daysElapsedSince(createdAt: Date, capDays: number): number {
   return Math.max(0, Math.min(days, capDays));
 }
 
-adminRouter.get("/roi/investments", async (req: AuthedRequest, res) => {
+adminRouter.get("/roi/investments", requirePermission("roi.manage"), async (req: AuthedRequest, res) => {
   try {
     const search = (req.query.search as string) || "";
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
@@ -1294,7 +1322,7 @@ adminRouter.get("/roi/investments", async (req: AuthedRequest, res) => {
   }
 });
 
-adminRouter.get("/roi/investments/:investmentId", async (req: AuthedRequest, res) => {
+adminRouter.get("/roi/investments/:investmentId", requirePermission("roi.manage"), async (req: AuthedRequest, res) => {
   try {
     const { investmentId } = req.params;
 
@@ -1456,7 +1484,7 @@ adminRouter.post(
 
 // ============ REFERRAL PROGRAM ============
 
-adminRouter.get("/referral-config", async (_req: AuthedRequest, res) => {
+adminRouter.get("/referral-config", requirePermission("referrals.manage"), async (_req: AuthedRequest, res) => {
   try {
     const rows = await db
       .select({
@@ -1529,7 +1557,7 @@ adminRouter.post(
   },
 );
 
-adminRouter.get("/referral-rewards", async (req: AuthedRequest, res) => {
+adminRouter.get("/referral-rewards", requirePermission("referrals.manage"), async (req: AuthedRequest, res) => {
   try {
     const search = (req.query.search as string) || "";
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
@@ -1593,7 +1621,7 @@ adminRouter.get("/referral-rewards", async (req: AuthedRequest, res) => {
 
 // ============ MANUAL DEPOSITS ============
 
-adminRouter.get("/deposit-settings", async (_req: AuthedRequest, res) => {
+adminRouter.get("/deposit-settings", requirePermission("deposits.manage"), async (_req: AuthedRequest, res) => {
   try {
     const [settings] = await db
       .select({
@@ -1665,7 +1693,7 @@ adminRouter.post(
 );
 
 // Which deposit methods users can see on the wallet Deposit tab.
-adminRouter.get("/deposit-methods", async (_req: AuthedRequest, res) => {
+adminRouter.get("/deposit-methods", requirePermission("deposits.manage"), async (_req: AuthedRequest, res) => {
   try {
     const [row] = await db.select().from(depositMethodSettings).limit(1);
     res.json({
@@ -1734,7 +1762,7 @@ adminRouter.put(
   },
 );
 
-adminRouter.get("/manual-deposits/pending", async (req: AuthedRequest, res) => {
+adminRouter.get("/manual-deposits/pending", requirePermission("deposits.manage"), async (req: AuthedRequest, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = 50;
@@ -1771,7 +1799,7 @@ adminRouter.get("/manual-deposits/pending", async (req: AuthedRequest, res) => {
   }
 });
 
-adminRouter.get("/manual-deposits/:depositId", async (req: AuthedRequest, res) => {
+adminRouter.get("/manual-deposits/:depositId", requirePermission("deposits.manage"), async (req: AuthedRequest, res) => {
   try {
     const [deposit] = await db
       .select()
@@ -1824,7 +1852,10 @@ adminRouter.post(
           : await db.select().from(wallets).where(eq(wallets.userId, deposit.userId)).limit(1);
 
       const balanceBefore = Number(currentWallet.balanceGhs);
-      const amount = Number(deposit.amountGhs);
+      const gross = Number(deposit.amountGhs);
+      const { depositFeePct } = await getPaymentRules();
+      const feeGhs = Math.round(gross * (depositFeePct / 100) * 100) / 100;
+      const amount = Math.round((gross - feeGhs) * 100) / 100;
       const balanceAfter = balanceBefore + amount;
 
       await db
@@ -1841,7 +1872,10 @@ adminRouter.post(
         status: "completed",
         method: "momo",
         reference: deposit.reference,
-        description: `Manual mobile money deposit (${deposit.network})`,
+        description:
+          feeGhs > 0
+            ? `Manual mobile money deposit (${deposit.network}) · GHS ${gross.toFixed(2)} less ${depositFeePct}% fee`
+            : `Manual mobile money deposit (${deposit.network})`,
       });
 
       await db
@@ -2645,6 +2679,128 @@ adminRouter.post(
     } catch (error) {
       console.error("Error uploading chat image:", error);
       res.status(500).json({ error: "Failed to upload image" });
+    }
+  },
+);
+
+// ============ PAYMENT SETTINGS (limits, fees, withdrawal windows) ============
+
+const nullableAmount = z.preprocess(
+  (v) => (v === "" || v == null ? null : v),
+  z.coerce.number().nonnegative().nullable(),
+);
+const nullableTime = z.preprocess(
+  (v) => (v === "" || v == null ? null : v),
+  z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable(),
+);
+
+const paymentSettingsInputSchema = z
+  .object({
+    minDepositGhs: nullableAmount.optional().default(null),
+    maxDepositGhs: nullableAmount.optional().default(null),
+    minWithdrawalGhs: nullableAmount.optional().default(null),
+    maxWithdrawalGhs: nullableAmount.optional().default(null),
+    depositFeePct: z.coerce.number().min(0).max(100).optional().default(0),
+    withdrawalFeePct: z.coerce.number().min(0).max(100).optional().default(0),
+    withdrawalDays: z
+      .array(z.coerce.number().int().min(0).max(6))
+      .max(7)
+      .optional()
+      .default([]),
+    withdrawalStartTime: nullableTime.optional().default(null),
+    withdrawalEndTime: nullableTime.optional().default(null),
+  })
+  .refine(
+    (d) =>
+      d.minDepositGhs == null || d.maxDepositGhs == null || d.maxDepositGhs >= d.minDepositGhs,
+    { message: "Maximum deposit must be at least the minimum deposit" },
+  )
+  .refine(
+    (d) =>
+      d.minWithdrawalGhs == null ||
+      d.maxWithdrawalGhs == null ||
+      d.maxWithdrawalGhs >= d.minWithdrawalGhs,
+    { message: "Maximum withdrawal must be at least the minimum withdrawal" },
+  )
+  .refine((d) => (d.withdrawalStartTime == null) === (d.withdrawalEndTime == null), {
+    message: "Set both start and end time, or leave both blank for any time",
+  });
+
+adminRouter.get(
+  "/payment-settings",
+  requirePermission("payments.manage"),
+  async (_req: AuthedRequest, res) => {
+    try {
+      const [row] = await db.select().from(paymentSettings).limit(1);
+      res.json({
+        data: row ?? {
+          minDepositGhs: null,
+          maxDepositGhs: null,
+          minWithdrawalGhs: null,
+          maxWithdrawalGhs: null,
+          depositFeePct: "0",
+          withdrawalFeePct: "0",
+          withdrawalDays: [],
+          withdrawalStartTime: null,
+          withdrawalEndTime: null,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching payment settings:", error);
+      res.status(500).json({ error: "Failed to fetch payment settings" });
+    }
+  },
+);
+
+adminRouter.put(
+  "/payment-settings",
+  requirePermission("payments.manage"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const parsed = paymentSettingsInputSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+      }
+      const d = parsed.data;
+      const values = {
+        minDepositGhs: d.minDepositGhs?.toFixed(2) ?? null,
+        maxDepositGhs: d.maxDepositGhs?.toFixed(2) ?? null,
+        minWithdrawalGhs: d.minWithdrawalGhs?.toFixed(2) ?? null,
+        maxWithdrawalGhs: d.maxWithdrawalGhs?.toFixed(2) ?? null,
+        depositFeePct: d.depositFeePct.toFixed(2),
+        withdrawalFeePct: d.withdrawalFeePct.toFixed(2),
+        withdrawalDays: [...new Set(d.withdrawalDays)].sort((a, b) => a - b),
+        withdrawalStartTime: d.withdrawalStartTime,
+        withdrawalEndTime: d.withdrawalEndTime,
+        updatedAt: new Date(),
+      };
+
+      const [existing] = await db
+        .select({ id: paymentSettings.id })
+        .from(paymentSettings)
+        .limit(1);
+      let row;
+      if (existing) {
+        [row] = await db
+          .update(paymentSettings)
+          .set(values)
+          .where(eq(paymentSettings.id, existing.id))
+          .returning();
+      } else {
+        [row] = await db.insert(paymentSettings).values(values).returning();
+      }
+
+      await logAdminAction(
+        req.user!.userId,
+        "UPDATE_PAYMENT_SETTINGS",
+        "payment_settings",
+        row.id,
+        values as Record<string, unknown>,
+      );
+      res.json({ data: row });
+    } catch (error) {
+      console.error("Error updating payment settings:", error);
+      res.status(500).json({ error: "Failed to update payment settings" });
     }
   },
 );

@@ -260,6 +260,33 @@ export function WalletPage() {
     [isGhana],
   );
 
+  // Platform-wide limits, fees, and withdrawal windows set by the admin.
+  const [paymentRules, setPaymentRules] = useState<{
+    minDepositGhs: number | null;
+    maxDepositGhs: number | null;
+    minWithdrawalGhs: number | null;
+    maxWithdrawalGhs: number | null;
+    depositFeePct: number;
+    withdrawalFeePct: number;
+    withdrawalOpenNow: boolean;
+    withdrawalClosedReason: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    api
+      .get("/api/payment-rules")
+      .then(({ data }) => setPaymentRules(data))
+      .catch(() => {});
+  }, []);
+
+  function limitsHint(min: number | null, max: number | null, feePct: number) {
+    const parts: string[] = [];
+    if (min !== null) parts.push(`Min GHS ${min.toFixed(2)}`);
+    if (max !== null) parts.push(`Max GHS ${max.toFixed(2)}`);
+    if (feePct > 0) parts.push(`${feePct}% fee applies`);
+    return parts.join(" · ");
+  }
+
   const [withdrawType, setWithdrawType] = useState<"momo" | "bank" | "crypto">(
     "momo",
   );
@@ -502,6 +529,20 @@ export function WalletPage() {
                     )}
                   </p>
                 )}
+                {paymentRules &&
+                  limitsHint(
+                    paymentRules.minDepositGhs,
+                    paymentRules.maxDepositGhs,
+                    paymentRules.depositFeePct,
+                  ) && (
+                    <p className="mt-1 text-xs text-ink-400">
+                      {limitsHint(
+                        paymentRules.minDepositGhs,
+                        paymentRules.maxDepositGhs,
+                        paymentRules.depositFeePct,
+                      )}
+                    </p>
+                  )}
               </div>
               <div>
                 <Label>Method</Label>
@@ -574,6 +615,12 @@ export function WalletPage() {
 
         <TabsContent value="withdraw">
           <div className="space-y-4">
+            {paymentRules && !paymentRules.withdrawalOpenNow && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                {paymentRules.withdrawalClosedReason ??
+                  "Withdrawals are currently closed. Please check back later."}
+              </div>
+            )}
             <div className="grid grid-cols-3 gap-2">
               {availableMethodTypes.map(({ type, label, icon: Icon }) => (
                 <button
@@ -641,6 +688,32 @@ export function WalletPage() {
                         </>
                       )}
                     </p>
+                    {paymentRules &&
+                      limitsHint(
+                        paymentRules.minWithdrawalGhs,
+                        paymentRules.maxWithdrawalGhs,
+                        paymentRules.withdrawalFeePct,
+                      ) && (
+                        <p className="mt-1 text-xs text-ink-400">
+                          {limitsHint(
+                            paymentRules.minWithdrawalGhs,
+                            paymentRules.maxWithdrawalGhs,
+                            paymentRules.withdrawalFeePct,
+                          )}
+                        </p>
+                      )}
+                    {paymentRules &&
+                      paymentRules.withdrawalFeePct > 0 &&
+                      Number(withdrawAmount) > 0 && (
+                        <p className="mt-1 text-xs font-medium text-ink-600">
+                          You'll receive GHS{" "}
+                          {(
+                            Number(withdrawAmount) *
+                            (1 - paymentRules.withdrawalFeePct / 100)
+                          ).toFixed(2)}{" "}
+                          after the {paymentRules.withdrawalFeePct}% fee
+                        </p>
+                      )}
                   </div>
                   <div>
                     <Label>Send to</Label>

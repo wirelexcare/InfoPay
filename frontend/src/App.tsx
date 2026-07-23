@@ -34,6 +34,7 @@ import { AdminAnnouncementsPage } from "./pages/AdminAnnouncementsPage";
 import { AboutPage } from "./pages/AboutPage";
 import { SupportPage } from "./pages/SupportPage";
 import { AdminSupportPage } from "./pages/AdminSupportPage";
+import { AdminPaymentSettingsPage } from "./pages/AdminPaymentSettingsPage";
 import { ChatPage } from "./pages/ChatPage";
 import { AdminChatsPage } from "./pages/AdminChatsPage";
 import { AdminChatDetailPage } from "./pages/AdminChatDetailPage";
@@ -271,6 +272,14 @@ export default function App() {
         element={
           <RequireAuth>
             <AdminSupportPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin/payment-rules"
+        element={
+          <RequireAuth>
+            <AdminPaymentSettingsPage />
           </RequireAuth>
         }
       />

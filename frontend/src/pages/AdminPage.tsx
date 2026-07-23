@@ -17,6 +17,7 @@ import {
   Megaphone,
   Headphones,
   MessageSquare,
+  SlidersHorizontal,
   Menu,
   X,
 } from "lucide-react";
@@ -132,6 +133,7 @@ export function AdminPage() {
     { label: "Announcements", icon: Megaphone, to: "/admin/announcements" },
     { label: "Support Links", icon: Headphones, to: "/admin/support" },
     { label: "Live Chats", icon: MessageSquare, to: "/admin/chats" },
+    { label: "Payment Rules", icon: SlidersHorizontal, to: "/admin/payment-rules" },
   ];
 
   // Most-used destinations, surfaced as a bottom nav on small screens

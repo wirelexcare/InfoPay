@@ -552,3 +552,23 @@ export const supportSettings = pgTable("support_settings", {
     .default([]),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+export const paymentSettings = pgTable("payment_settings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  minDepositGhs: numeric("min_deposit_ghs", { precision: 14, scale: 2 }),
+  maxDepositGhs: numeric("max_deposit_ghs", { precision: 14, scale: 2 }),
+  minWithdrawalGhs: numeric("min_withdrawal_ghs", { precision: 14, scale: 2 }),
+  maxWithdrawalGhs: numeric("max_withdrawal_ghs", { precision: 14, scale: 2 }),
+  depositFeePct: numeric("deposit_fee_pct", { precision: 5, scale: 2 })
+    .notNull()
+    .default("0"),
+  withdrawalFeePct: numeric("withdrawal_fee_pct", { precision: 5, scale: 2 })
+    .notNull()
+    .default("0"),
+  // Weekdays withdrawals are allowed (0=Sunday..6=Saturday); empty = every day.
+  withdrawalDays: jsonb("withdrawal_days").$type<number[]>().notNull().default([]),
+  // "HH:MM" 24h in GMT (Ghana time); both null = any time of day.
+  withdrawalStartTime: varchar("withdrawal_start_time", { length: 5 }),
+  withdrawalEndTime: varchar("withdrawal_end_time", { length: 5 }),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});

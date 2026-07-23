@@ -9,6 +9,7 @@ import {
   walletTransactions,
 } from "../db/schema.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
+import { getPaymentRules } from "../lib/paymentSettings.js";
 import {
   createCryptoPayment,
   getCryptoDepositQuote,
@@ -107,6 +108,18 @@ paymentsRouter.post(
       return res.status(400).json({ error: "Amount must be greater than zero" });
     }
 
+    const rules = await getPaymentRules();
+    if (rules.minDepositGhs !== null && amountGhs < rules.minDepositGhs) {
+      return res.status(400).json({
+        error: `Minimum deposit is GHS ${rules.minDepositGhs.toFixed(2)}`,
+      });
+    }
+    if (rules.maxDepositGhs !== null && amountGhs > rules.maxDepositGhs) {
+      return res.status(400).json({
+        error: `Maximum deposit is GHS ${rules.maxDepositGhs.toFixed(2)}`,
+      });
+    }
+
     const result = await createCryptoPayment(userId, amountGhs);
     if (!result.ok) {
       return res.status(400).json({ error: result.error });
@@ -167,7 +180,10 @@ paymentsRouter.post("/crypto/ipn", async (req, res) => {
     .where(eq(cryptoPayments.id, record.id));
 
   if (payment_status === "finished" && !alreadyCredited && record.amountGhs) {
-    const amount = Number(record.amountGhs);
+    const gross = Number(record.amountGhs);
+    const { depositFeePct } = await getPaymentRules();
+    const feeGhs = Math.round(gross * (depositFeePct / 100) * 100) / 100;
+    const amount = Math.round((gross - feeGhs) * 100) / 100;
 
     const [inserted] = await db
       .insert(wallets)
@@ -200,7 +216,10 @@ paymentsRouter.post("/crypto/ipn", async (req, res) => {
       status: "completed",
       method: "crypto",
       reference: String(payment_id),
-      description: "Deposit via USDT (TRC20)",
+      description:
+        feeGhs > 0
+          ? `Deposit via USDT (TRC20) · GHS ${gross.toFixed(2)} less ${depositFeePct}% fee`
+          : "Deposit via USDT (TRC20)",
     });
   }
 
