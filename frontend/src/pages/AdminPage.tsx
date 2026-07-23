@@ -8,6 +8,7 @@ import {
   Building2,
   DollarSign,
   CreditCard,
+  LayoutDashboard,
   LogOut,
   Scale,
   Gift,
@@ -107,13 +108,22 @@ export function AdminPage() {
       <header className="sticky top-0 z-20 border-b border-border bg-card/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6">
           <h1 className="text-lg font-bold sm:text-xl">Admin Dashboard</h1>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 rounded-full bg-red-50 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-100"
-          >
-            <LogOut size={16} />
-            <span className="hidden sm:inline">Logout</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate("/dashboard")}
+              className="flex items-center gap-2 rounded-full bg-primary/10 px-3 py-2 text-sm font-medium text-primary transition hover:bg-primary/20"
+            >
+              <LayoutDashboard size={16} />
+              <span className="hidden sm:inline">Investor view</span>
+            </button>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 rounded-full bg-red-50 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-100"
+            >
+              <LogOut size={16} />
+              <span className="hidden sm:inline">Logout</span>
+            </button>
+          </div>
         </div>
 
         {/* Mobile: horizontal scrolling nav */}
