@@ -20,6 +20,7 @@ import {
   referralConfig,
   referralRewards,
   depositSettings,
+  depositMethodSettings,
   manualDeposits,
   rewardPools,
   rewardClaims,
@@ -1659,6 +1660,76 @@ adminRouter.post(
     } catch (error) {
       console.error("Error updating deposit settings:", error);
       res.status(500).json({ error: "Failed to update deposit settings" });
+    }
+  },
+);
+
+// Which deposit methods users can see on the wallet Deposit tab.
+adminRouter.get("/deposit-methods", async (_req: AuthedRequest, res) => {
+  try {
+    const [row] = await db.select().from(depositMethodSettings).limit(1);
+    res.json({
+      data: {
+        momoEnabled: row?.momoEnabled ?? true,
+        cryptoEnabled: row?.cryptoEnabled ?? true,
+        chatEnabled: row?.chatEnabled ?? true,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching deposit methods:", error);
+    res.status(500).json({ error: "Failed to fetch deposit methods" });
+  }
+});
+
+const depositMethodsSchema = z.object({
+  momoEnabled: z.boolean(),
+  cryptoEnabled: z.boolean(),
+  chatEnabled: z.boolean(),
+});
+
+adminRouter.put(
+  "/deposit-methods",
+  requirePermission("deposits.manage"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const parsed = depositMethodsSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+      }
+
+      const values = {
+        ...parsed.data,
+        updatedBy: req.user!.userId,
+        updatedAt: new Date(),
+      };
+
+      const [existing] = await db
+        .select({ id: depositMethodSettings.id })
+        .from(depositMethodSettings)
+        .limit(1);
+      let row;
+      if (existing) {
+        [row] = await db
+          .update(depositMethodSettings)
+          .set(values)
+          .where(eq(depositMethodSettings.id, existing.id))
+          .returning();
+      } else {
+        [row] = await db.insert(depositMethodSettings).values(values).returning();
+      }
+
+      await logAdminAction(
+        req.user!.userId,
+        "DEPOSIT_METHODS_UPDATED",
+        "deposit_method_settings",
+        row.id,
+        parsed.data,
+      );
+
+      res.json({ data: row });
+    } catch (error) {
+      console.error("Error updating deposit methods:", error);
+      res.status(500).json({ error: "Failed to update deposit methods" });
     }
   },
 );

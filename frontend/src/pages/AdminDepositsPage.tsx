@@ -27,11 +27,41 @@ interface PendingDeposit {
 
 const NETWORKS = ["mtn", "vodafone", "telecel", "airteltigo"];
 
+interface DepositMethods {
+  momoEnabled: boolean;
+  cryptoEnabled: boolean;
+  chatEnabled: boolean;
+}
+
+const METHOD_OPTIONS: { key: keyof DepositMethods; label: string; hint: string }[] = [
+  {
+    key: "momoEnabled",
+    label: "Mobile Money",
+    hint: "Manual MoMo deposit with payment screenshot and review",
+  },
+  {
+    key: "cryptoEnabled",
+    label: "USDT (Crypto)",
+    hint: "Automatic crypto deposits via NOWPayments",
+  },
+  {
+    key: "chatEnabled",
+    label: "Live Chat",
+    hint: "User arranges the top-up with an admin in live chat",
+  },
+];
+
 export function AdminDepositsPage() {
   const navigate = useNavigate();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [form, setForm] = useState({ network: "mtn", accountName: "", accountNumber: "" });
   const [saving, setSaving] = useState(false);
+  const [methods, setMethods] = useState<DepositMethods>({
+    momoEnabled: true,
+    cryptoEnabled: true,
+    chatEnabled: true,
+  });
+  const [savingMethods, setSavingMethods] = useState(false);
   const [pending, setPending] = useState<PendingDeposit[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -41,8 +71,9 @@ export function AdminDepositsPage() {
   const fetchAll = async (p = page) => {
     try {
       setLoading(true);
-      const [settingsRes, pendingRes] = await Promise.all([
+      const [settingsRes, methodsRes, pendingRes] = await Promise.all([
         api.get("/api/admin/deposit-settings"),
+        api.get("/api/admin/deposit-methods"),
         api.get(`/api/admin/manual-deposits/pending?page=${p}`),
       ]);
       setSettings(settingsRes.data.data);
@@ -53,6 +84,7 @@ export function AdminDepositsPage() {
           accountNumber: settingsRes.data.data.accountNumber,
         });
       }
+      setMethods(methodsRes.data.data);
       setPending(pendingRes.data.data);
       setTotal(pendingRes.data.total);
       setPage(p);
@@ -81,6 +113,21 @@ export function AdminDepositsPage() {
     }
   }
 
+  async function handleSaveMethods(next: DepositMethods) {
+    const previous = methods;
+    setMethods(next);
+    try {
+      setSavingMethods(true);
+      await api.put("/api/admin/deposit-methods", next);
+      toast.success("Payment methods updated");
+    } catch (error: any) {
+      setMethods(previous);
+      toast.error(error.response?.data?.error ?? "Failed to update payment methods");
+    } finally {
+      setSavingMethods(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background p-6">
@@ -104,6 +151,38 @@ export function AdminDepositsPage() {
         </button>
 
         <h1 className="text-3xl font-bold mb-6">Mobile Money Deposits</h1>
+
+        <div className="rounded-lg border border-border bg-card p-6 mb-6">
+          <h2 className="text-sm font-bold text-ink-700 uppercase mb-4">
+            Visible Payment Methods
+          </h2>
+          <p className="text-sm text-ink-500 mb-4">
+            Choose which top-up methods users can pick on the wallet Deposit tab.
+            Changes apply immediately.
+          </p>
+          <div className="space-y-3">
+            {METHOD_OPTIONS.map(({ key, label, hint }) => (
+              <label
+                key={key}
+                className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border border-border px-4 py-3 transition hover:border-primary/30"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-ink-900">{label}</p>
+                  <p className="text-xs text-ink-500">{hint}</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={methods[key]}
+                  disabled={savingMethods}
+                  onChange={(e) =>
+                    handleSaveMethods({ ...methods, [key]: e.target.checked })
+                  }
+                  className="h-5 w-5 accent-primary"
+                />
+              </label>
+            ))}
+          </div>
+        </div>
 
         <div className="rounded-lg border border-border bg-card p-6 mb-6">
           <h2 className="text-sm font-bold text-ink-700 uppercase mb-4">

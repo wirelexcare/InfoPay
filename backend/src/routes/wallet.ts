@@ -9,6 +9,7 @@ import {
   withdrawalMethods,
   users,
   depositSettings,
+  depositMethodSettings,
   manualDeposits,
   rewardPools,
   rewardClaims,
@@ -327,6 +328,22 @@ walletRouter.delete(
 );
 
 // ============ MANUAL MOBILE MONEY DEPOSIT ============
+
+// Which deposit methods the admin has made visible; all enabled by default
+// until an admin saves a preference.
+walletRouter.get("/deposit-methods", requireAuth, async (_req, res) => {
+  try {
+    const [row] = await db.select().from(depositMethodSettings).limit(1);
+    res.json({
+      momo: row?.momoEnabled ?? true,
+      crypto: row?.cryptoEnabled ?? true,
+      chat: row?.chatEnabled ?? true,
+    });
+  } catch (error) {
+    console.error("Error fetching deposit methods:", error);
+    res.status(500).json({ error: "Failed to load deposit methods" });
+  }
+});
 
 walletRouter.get("/deposit-settings", requireAuth, async (_req, res) => {
   const [settings] = await db

@@ -209,10 +209,42 @@ export function WalletPage() {
   const [loading, setLoading] = useState(true);
 
   const [depositAmount, setDepositAmount] = useState("");
-  const [depositMethod, setDepositMethod] = useState<"momo" | "bank" | "crypto">(
-    "momo",
-  );
+  const [depositMethod, setDepositMethod] = useState<
+    "momo" | "bank" | "crypto" | "chat"
+  >("momo");
   const [depositLoading, setDepositLoading] = useState(false);
+
+  // Which deposit methods the admin has enabled; all shown until loaded.
+  const [enabledDepositMethods, setEnabledDepositMethods] = useState<{
+    momo: boolean;
+    crypto: boolean;
+    chat: boolean;
+  }>({ momo: true, crypto: true, chat: true });
+
+  useEffect(() => {
+    api
+      .get("/api/wallet/deposit-methods")
+      .then(({ data }) => {
+        setEnabledDepositMethods({
+          momo: data.momo ?? true,
+          crypto: data.crypto ?? true,
+          chat: data.chat ?? true,
+        });
+      })
+      .catch(() => {});
+  }, []);
+
+  // Keep the selected method valid when the admin has hidden it.
+  useEffect(() => {
+    const order: ("momo" | "crypto" | "chat")[] = ["momo", "crypto", "chat"];
+    if (
+      depositMethod !== "bank" &&
+      !enabledDepositMethods[depositMethod as "momo" | "crypto" | "chat"]
+    ) {
+      const first = order.find((m) => enabledDepositMethods[m]);
+      if (first) setDepositMethod(first);
+    }
+  }, [enabledDepositMethods, depositMethod]);
 
   const availableMethodTypes = useMemo(
     () => METHOD_TYPES.filter((m) => m.type === "crypto" || isGhana),
@@ -298,6 +330,14 @@ export function WalletPage() {
           payCurrency: data.payCurrency,
         });
         setDepositAmount("");
+      } else if (depositMethod === "chat") {
+        // Post the top-up intent into the live chat and take the user there;
+        // an admin arranges the payment and credits the wallet from the chat.
+        await api.post("/api/chat/messages", {
+          body: `Hi, I'd like to top up my account with GHS ${Number(depositAmount).toFixed(2)}.`,
+        });
+        setDepositAmount("");
+        navigate("/chat");
       } else {
         const [settingsRes, referenceRes] = await Promise.all([
           api.get("/api/wallet/deposit-settings"),
@@ -460,14 +500,27 @@ export function WalletPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="momo">Mobile Money</SelectItem>
-                    <SelectItem value="crypto">USDT (Crypto)</SelectItem>
+                    {enabledDepositMethods.momo && (
+                      <SelectItem value="momo">Mobile Money</SelectItem>
+                    )}
+                    {enabledDepositMethods.crypto && (
+                      <SelectItem value="crypto">USDT (Crypto)</SelectItem>
+                    )}
+                    {enabledDepositMethods.chat && (
+                      <SelectItem value="chat">Live Chat</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
                 {depositMethod === "momo" && (
                   <p className="mt-1.5 text-xs text-ink-400">
                     You'll pay to our mobile money account and upload proof —
                     your wallet is credited after a quick manual review.
+                  </p>
+                )}
+                {depositMethod === "chat" && (
+                  <p className="mt-1.5 text-xs text-ink-400">
+                    You'll be taken to a live chat with our team to arrange the
+                    top-up. Your wallet is credited once payment is confirmed.
                   </p>
                 )}
               </div>
@@ -481,7 +534,9 @@ export function WalletPage() {
                   ? "Processing…"
                   : depositMethod === "crypto"
                     ? "Get deposit address"
-                    : "Get payment instructions"}
+                    : depositMethod === "chat"
+                      ? "Continue in live chat"
+                      : "Get payment instructions"}
               </Button>
             </form>
           </Card>

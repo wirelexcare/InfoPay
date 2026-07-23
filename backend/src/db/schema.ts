@@ -392,6 +392,18 @@ export const depositSettings = pgTable("deposit_settings", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// Which deposit/top-up methods are visible to users; admin-controlled.
+export const depositMethodSettings = pgTable("deposit_method_settings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  momoEnabled: boolean("momo_enabled").notNull().default(true),
+  cryptoEnabled: boolean("crypto_enabled").notNull().default(true),
+  chatEnabled: boolean("chat_enabled").notNull().default(true),
+  updatedBy: uuid("updated_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 export const manualDeposits = pgTable("manual_deposits", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id")
