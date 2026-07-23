@@ -223,6 +223,32 @@ export function AdminChatDetailPage() {
     }
   }
 
+  function openCreditDialog() {
+    // Prefill with the most recent amount the user asked for, either a
+    // live-chat top-up message or a pending deposit card; stays editable.
+    let amount = "";
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.manualDepositId) {
+        const deposit = deposits[m.manualDepositId];
+        if (deposit?.status === "pending") {
+          amount = Number(deposit.amountGhs).toFixed(2);
+          break;
+        }
+      }
+      if (m.senderRole === "user" && m.body && /top\s*up/i.test(m.body)) {
+        const match = m.body.match(/GHS\s*([\d,]+(?:\.\d{1,2})?)/i);
+        if (match) {
+          amount = match[1].replace(/,/g, "");
+          break;
+        }
+      }
+    }
+    setCreditAmount(amount);
+    setCreditReason("Top-up via live chat");
+    setCreditOpen(true);
+  }
+
   async function handleCredit(e: FormEvent) {
     e.preventDefault();
     setCrediting(true);
@@ -273,7 +299,7 @@ export function AdminChatDetailPage() {
               <p className="truncate text-xs text-ink-400">{chatUser?.phone ?? ""}</p>
             </div>
             <button
-              onClick={() => setCreditOpen(true)}
+              onClick={openCreditDialog}
               className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground transition active:scale-95"
             >
               <Wallet size={14} />

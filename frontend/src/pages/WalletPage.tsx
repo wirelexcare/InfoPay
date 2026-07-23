@@ -212,6 +212,8 @@ export function WalletPage() {
   const [depositMethod, setDepositMethod] = useState<
     "momo" | "bank" | "crypto" | "chat"
   >("momo");
+  // Contact number sent along with a live-chat top-up request
+  const [depositPhone, setDepositPhone] = useState(user?.phone ?? "");
   const [depositLoading, setDepositLoading] = useState(false);
 
   // Which deposit methods the admin has enabled; all shown until loaded.
@@ -333,8 +335,12 @@ export function WalletPage() {
       } else if (depositMethod === "chat") {
         // Post the top-up intent into the live chat and take the user there;
         // an admin arranges the payment and credits the wallet from the chat.
+        if (depositPhone.trim().length < 7) {
+          toast.error("Please enter a valid phone number");
+          return;
+        }
         await api.post("/api/chat/messages", {
-          body: `Hi, I'd like to top up my account with GHS ${Number(depositAmount).toFixed(2)}.`,
+          body: `Hi, I'd like to top up my account with GHS ${Number(depositAmount).toFixed(2)}. You can reach me on ${depositPhone.trim()}.`,
         });
         setDepositAmount("");
         navigate("/chat");
@@ -524,6 +530,23 @@ export function WalletPage() {
                   </p>
                 )}
               </div>
+              {depositMethod === "chat" && (
+                <div>
+                  <Label htmlFor="depositPhone">Phone number</Label>
+                  <Input
+                    id="depositPhone"
+                    type="tel"
+                    required
+                    minLength={7}
+                    value={depositPhone}
+                    onChange={(e) => setDepositPhone(e.target.value)}
+                    placeholder="0240000000"
+                  />
+                  <p className="mt-1 text-xs text-ink-400">
+                    Included in your message so our team can reach you.
+                  </p>
+                </div>
+              )}
               <Button
                 type="submit"
                 size="lg"

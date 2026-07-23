@@ -54,6 +54,28 @@ export function AdminPage() {
     fetchDashboard();
   }, [user, navigate]);
 
+  // Unread live-chat messages badge on the header icon
+  const [chatUnread, setChatUnread] = useState(0);
+  useEffect(() => {
+    if (user?.role !== "admin") return;
+    let cancelled = false;
+    async function fetchUnread() {
+      if (document.visibilityState === "hidden") return;
+      try {
+        const { data } = await api.get("/api/admin/chats/unread");
+        if (!cancelled) setChatUnread(data.count ?? 0);
+      } catch {
+        // ignore; badge just stays stale
+      }
+    }
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [user]);
+
   const handleLogout = () => {
     logout();
     navigate("/login");
@@ -115,6 +137,20 @@ export function AdminPage() {
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6">
           <h1 className="text-lg font-bold sm:text-xl">Admin Dashboard</h1>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate("/admin/chats")}
+              className="relative flex items-center gap-2 rounded-full bg-primary/10 px-3 py-2 text-sm font-medium text-primary transition hover:bg-primary/20"
+              aria-label="Live chats"
+              title="Live Chats"
+            >
+              <Headphones size={16} />
+              <span className="hidden sm:inline">Live Chats</span>
+              {chatUnread > 0 && (
+                <span className="absolute -right-1 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                  {chatUnread > 99 ? "99+" : chatUnread}
+                </span>
+              )}
+            </button>
             <button
               onClick={() => navigate("/dashboard")}
               className="flex items-center gap-2 rounded-full bg-primary/10 px-3 py-2 text-sm font-medium text-primary transition hover:bg-primary/20"
