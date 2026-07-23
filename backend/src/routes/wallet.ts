@@ -551,6 +551,9 @@ walletRouter.post(
         const max = Number(pool.max_amount_ghs);
         claimAmount = Math.random() * (max - min) + min;
       }
+      // Round to cents once so the credit, claim record, and pool
+      // accounting all use the exact same figure.
+      claimAmount = Math.round(claimAmount * 100) / 100;
 
       // 6. Check if pool has enough remaining
       const claimed = Number(pool.claimed_pool_ghs);

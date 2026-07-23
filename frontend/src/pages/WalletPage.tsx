@@ -144,7 +144,7 @@ function RewardsTabContent({ onClaimed }: { onClaimed: () => void }) {
 
       if (res.data.status === "success") {
         toast.success(
-          `You won ₵${res.data.claimAmount}!${res.data.isPoolExhausted ? " (pool exhausted)" : ""}`,
+          `You won ₵${Number(res.data.claimAmount).toFixed(2)}!${res.data.isPoolExhausted ? " (pool exhausted)" : ""}`,
         );
         setLastClaimResult({ status: "success", claimAmount: res.data.claimAmount });
         setClaimCode("");

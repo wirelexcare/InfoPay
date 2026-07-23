@@ -27,9 +27,11 @@ export function convertFromGhs(amountGhs: number, currency: string): number {
 }
 
 export function formatCurrency(amount: number, currency: string): string {
+  // Show cents when present (e.g. reward claims), keep whole amounts clean.
   return new Intl.NumberFormat("en", {
     style: "currency",
     currency: currency.toUpperCase(),
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(amount);
 }
