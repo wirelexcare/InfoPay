@@ -1,6 +1,7 @@
 import { Link, NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { Building2, Gift, LayoutDashboard, LogOut, PieChart, Settings } from "lucide-react";
 import { useAuthStore } from "../lib/store";
+import { AnnouncementOverlay } from "./AnnouncementOverlay";
 
 const TABS = [
   { to: "/packages", label: "Packages", icon: Building2 },
@@ -96,6 +97,8 @@ export function Layout() {
       <main className={`mx-auto w-full max-w-sm px-4 pt-16 sm:px-6 ${user ? "pb-28" : "pb-8"}`}>
         <Outlet />
       </main>
+
+      <AnnouncementOverlay />
 
       {user && (
         <nav className="safe-bottom fixed inset-x-0 bottom-0 z-20 px-4 pb-3">

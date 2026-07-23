@@ -31,6 +31,7 @@ import { AdminDepositsPage } from "./pages/AdminDepositsPage";
 import { AdminDepositDetailPage } from "./pages/AdminDepositDetailPage";
 import { AdminRewardsPage } from "./pages/AdminRewardsPage";
 import { AdminRewardDetailPage } from "./pages/AdminRewardDetailPage";
+import { AdminAnnouncementsPage } from "./pages/AdminAnnouncementsPage";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const user = useAuthStore((s) => s.user);
@@ -247,6 +248,14 @@ export default function App() {
         element={
           <RequireAuth>
             <AdminRewardDetailPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin/announcements"
+        element={
+          <RequireAuth>
+            <AdminAnnouncementsPage />
           </RequireAuth>
         }
       />

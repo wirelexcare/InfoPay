@@ -9,6 +9,7 @@ import {
   jsonb,
   pgEnum,
   smallint,
+  integer,
 } from "drizzle-orm/pg-core";
 
 export const kycStatusEnum = pgEnum("kyc_status", [
@@ -469,4 +470,14 @@ export const confirmationTokens = pgTable("confirmation_tokens", {
   }),
   confirmedAt: timestamp("confirmed_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const announcements = pgTable("announcements", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  title: varchar("title", { length: 200 }).notNull(),
+  body: text("body").notNull(),
+  isActive: boolean("is_active").notNull().default(false),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

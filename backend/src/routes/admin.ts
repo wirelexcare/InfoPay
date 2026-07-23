@@ -24,6 +24,7 @@ import {
   rewardPools,
   rewardClaims,
   rewardPoolAudit,
+  announcements,
 } from "../db/schema.js";
 import {
   requireAuth,
@@ -2084,6 +2085,141 @@ adminRouter.patch(
     } catch (error) {
       console.error("Error updating reward pool:", error);
       res.status(500).json({ error: "Failed to update reward pool" });
+    }
+  },
+);
+
+// ============ ANNOUNCEMENTS ============
+
+const createAnnouncementSchema = z.object({
+  title: z.string().trim().min(2).max(200),
+  body: z.string().trim().min(2),
+  isActive: z.boolean().optional().default(false),
+});
+
+const updateAnnouncementSchema = z.object({
+  title: z.string().trim().min(2).max(200).optional(),
+  body: z.string().trim().min(2).optional(),
+  isActive: z.boolean().optional(),
+});
+
+const reorderSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1),
+});
+
+adminRouter.get(
+  "/announcements",
+  requirePermission("announcements.manage"),
+  async (_req: AuthedRequest, res) => {
+    try {
+      const rows = await db
+        .select()
+        .from(announcements)
+        .orderBy(asc(announcements.sortOrder), asc(announcements.createdAt));
+      res.json({ data: rows });
+    } catch (error) {
+      console.error("Error fetching announcements:", error);
+      res.status(500).json({ error: "Failed to fetch announcements" });
+    }
+  },
+);
+
+adminRouter.post(
+  "/announcements",
+  requirePermission("announcements.manage"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const parsed = createAnnouncementSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+      }
+      // New items go to the end of the current order.
+      const [{ max }] = await db
+        .select({ max: sql<number>`COALESCE(MAX(sort_order), -1)` })
+        .from(announcements);
+      const [row] = await db
+        .insert(announcements)
+        .values({ ...parsed.data, sortOrder: Number(max) + 1 })
+        .returning();
+      await logAdminAction(req.user!.userId, "CREATE_ANNOUNCEMENT", "announcements", row.id);
+      res.status(201).json({ data: row });
+    } catch (error) {
+      console.error("Error creating announcement:", error);
+      res.status(500).json({ error: "Failed to create announcement" });
+    }
+  },
+);
+
+adminRouter.patch(
+  "/announcements/:id",
+  requirePermission("announcements.manage"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const parsed = updateAnnouncementSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+      }
+      const [row] = await db
+        .update(announcements)
+        .set({ ...parsed.data, updatedAt: new Date() })
+        .where(eq(announcements.id, req.params.id))
+        .returning();
+      if (!row) {
+        return res.status(404).json({ error: "Announcement not found" });
+      }
+      await logAdminAction(req.user!.userId, "UPDATE_ANNOUNCEMENT", "announcements", row.id, parsed.data);
+      res.json({ data: row });
+    } catch (error) {
+      console.error("Error updating announcement:", error);
+      res.status(500).json({ error: "Failed to update announcement" });
+    }
+  },
+);
+
+adminRouter.post(
+  "/announcements/reorder",
+  requirePermission("announcements.manage"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const parsed = reorderSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+      }
+      // Assign sortOrder by the given order of ids.
+      await Promise.all(
+        parsed.data.ids.map((id, index) =>
+          db
+            .update(announcements)
+            .set({ sortOrder: index, updatedAt: new Date() })
+            .where(eq(announcements.id, id)),
+        ),
+      );
+      await logAdminAction(req.user!.userId, "REORDER_ANNOUNCEMENTS", "announcements", "");
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error reordering announcements:", error);
+      res.status(500).json({ error: "Failed to reorder announcements" });
+    }
+  },
+);
+
+adminRouter.delete(
+  "/announcements/:id",
+  requirePermission("announcements.manage"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const [row] = await db
+        .delete(announcements)
+        .where(eq(announcements.id, req.params.id))
+        .returning();
+      if (!row) {
+        return res.status(404).json({ error: "Announcement not found" });
+      }
+      await logAdminAction(req.user!.userId, "DELETE_ANNOUNCEMENT", "announcements", req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting announcement:", error);
+      res.status(500).json({ error: "Failed to delete announcement" });
     }
   },
 );
