@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { api } from "../lib/api";
 import { useAuthStore } from "../lib/store";
 import { COUNTRIES } from "../lib/countries";
+import { PHONE_RULES } from "../lib/phone";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -28,6 +29,14 @@ export function SignupPage() {
     referralCode: searchParams.get("ref") ?? "",
   });
   const [loading, setLoading] = useState(false);
+
+  const phoneRule = PHONE_RULES[form.country];
+  const phonePlaceholder = phoneRule
+    ? `+${phoneRule.callingCode} ${"X".repeat(phoneRule.digits)}`
+    : "+233 5X XXX XXXX";
+  const phoneHint = phoneRule
+    ? `Format: +${phoneRule.callingCode} followed by ${phoneRule.digits} digits`
+    : undefined;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -74,6 +83,25 @@ export function SignupPage() {
         </div>
 
         <div>
+          <Label>Country</Label>
+          <Select
+            value={form.country}
+            onValueChange={(v) => setForm({ ...form, country: v, phone: "" })}
+          >
+            <SelectTrigger icon={<Globe2 size={18} />}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {COUNTRIES.map((c) => (
+                <SelectItem key={c.code} value={c.code}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
           <Label htmlFor="phone">Phone number</Label>
           <Input
             id="phone"
@@ -82,8 +110,9 @@ export function SignupPage() {
             icon={<Phone size={18} />}
             value={form.phone}
             onChange={(e) => setForm({ ...form, phone: e.target.value })}
-            placeholder="+233 5X XXX XXXX"
+            placeholder={phonePlaceholder}
           />
+          {phoneHint && <p className="mt-1 text-xs text-ink-400">{phoneHint}</p>}
         </div>
 
         <div>
@@ -98,25 +127,6 @@ export function SignupPage() {
             onChange={(e) => setForm({ ...form, password: e.target.value })}
             placeholder="At least 8 characters"
           />
-        </div>
-
-        <div>
-          <Label>Country</Label>
-          <Select
-            value={form.country}
-            onValueChange={(v) => setForm({ ...form, country: v })}
-          >
-            <SelectTrigger icon={<Globe2 size={18} />}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {COUNTRIES.map((c) => (
-                <SelectItem key={c.code} value={c.code}>
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
 
         <div>

@@ -278,27 +278,18 @@ investmentsRouter.post(
           .returning({ id: payouts.id });
         if (updated.length === 0) return null;
 
-        const [inserted] = await tx
-          .insert(wallets)
-          .values({ userId })
-          .onConflictDoNothing()
-          .returning();
-        const [wallet] =
-          inserted !== undefined
-            ? [inserted]
-            : await tx
-                .select()
-                .from(wallets)
-                .where(eq(wallets.userId, userId))
-                .limit(1);
-
-        const balanceBefore = Number(wallet.balanceGhs);
-        const balanceAfter = balanceBefore + amount;
-
-        await tx
+        await tx.insert(wallets).values({ userId }).onConflictDoNothing();
+        const [credited] = await tx
           .update(wallets)
-          .set({ balanceGhs: balanceAfter.toFixed(2), updatedAt: new Date() })
-          .where(eq(wallets.userId, userId));
+          .set({
+            balanceGhs: sql`${wallets.balanceGhs} + ${amount.toFixed(2)}`,
+            updatedAt: new Date(),
+          })
+          .where(eq(wallets.userId, userId))
+          .returning();
+
+        const balanceAfter = Number(credited.balanceGhs);
+        const balanceBefore = Math.round((balanceAfter - amount) * 100) / 100;
 
         const [projectRow] = await tx
           .select({ title: projects.title })

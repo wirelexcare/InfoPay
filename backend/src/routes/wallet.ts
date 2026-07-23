@@ -429,6 +429,13 @@ walletRouter.post(
     const { reference, amountGhs, network, senderName, senderNumber, screenshotUrl } =
       parsed.data;
 
+    const [methodRow] = await db.select().from(depositMethodSettings).limit(1);
+    if (methodRow && !methodRow.momoEnabled) {
+      return res.status(400).json({
+        error: "Mobile money deposits are currently unavailable.",
+      });
+    }
+
     const rules = await getPaymentRules();
     if (rules.minDepositGhs !== null && amountGhs < rules.minDepositGhs) {
       return res.status(400).json({
