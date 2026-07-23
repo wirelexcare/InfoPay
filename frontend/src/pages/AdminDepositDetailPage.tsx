@@ -16,6 +16,8 @@ interface DepositDetail {
   status: "pending" | "approved" | "rejected";
   rejectionReason: string | null;
   createdAt: string;
+  depositFeePct: number;
+  expectedPaymentGhs: number;
   user: {
     id: string;
     phone: string;
@@ -183,7 +185,17 @@ export function AdminDepositDetailPage() {
           <h2 className="text-sm font-bold text-ink-700 uppercase mb-2">
             Payment Details
           </h2>
-          <Row label="Amount" value={`₵${parseFloat(deposit.amountGhs).toFixed(2)}`} />
+          <Row label="Amount to credit" value={`₵${parseFloat(deposit.amountGhs).toFixed(2)}`} />
+          {deposit.depositFeePct > 0 && (
+            <div className="flex items-center justify-between py-2.5 border-b border-border/50 last:border-0">
+              <span className="text-sm font-medium text-amber-700">
+                Expected payment (incl. {deposit.depositFeePct}% fee)
+              </span>
+              <span className="text-sm font-bold text-amber-700 text-right">
+                ₵{deposit.expectedPaymentGhs.toFixed(2)}
+              </span>
+            </div>
+          )}
           <Row label="Reference" value={deposit.reference} />
           <Row label="Network paid from" value={deposit.network.toUpperCase()} />
           <Row label="Sender name" value={deposit.senderName} />

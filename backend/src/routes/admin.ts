@@ -41,6 +41,7 @@ import {
 import { runDailyRoiAccrual } from "../lib/roiAccrual.js";
 import { uploadProjectImage, uploadPaymentScreenshot } from "../lib/storage.js";
 import { generateRewardPoolCode } from "../lib/rewardPoolCode.js";
+import { getPaymentRules } from "../lib/paymentSettings.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -1815,7 +1816,16 @@ adminRouter.get("/manual-deposits/:depositId", requirePermission("deposits.manag
       .from(users)
       .where(eq(users.id, deposit.userId));
 
-    res.json({ data: { ...deposit, user } });
+    // The user paid intended + fee (fee is charged on top), so show reviewers
+    // the exact figure to expect on the payment screenshot.
+    const { depositFeePct } = await getPaymentRules();
+    const intended = Number(deposit.amountGhs);
+    const expectedPaymentGhs =
+      Math.round(intended * (1 + depositFeePct / 100) * 100) / 100;
+
+    res.json({
+      data: { ...deposit, user, depositFeePct, expectedPaymentGhs },
+    });
   } catch (error) {
     console.error("Error fetching manual deposit:", error);
     res.status(500).json({ error: "Failed to fetch manual deposit" });
