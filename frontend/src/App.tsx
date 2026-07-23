@@ -33,6 +33,8 @@ import { AdminRewardsPage } from "./pages/AdminRewardsPage";
 import { AdminRewardDetailPage } from "./pages/AdminRewardDetailPage";
 import { AdminAnnouncementsPage } from "./pages/AdminAnnouncementsPage";
 import { AboutPage } from "./pages/AboutPage";
+import { SupportPage } from "./pages/SupportPage";
+import { AdminSupportPage } from "./pages/AdminSupportPage";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const user = useAuthStore((s) => s.user);
@@ -57,6 +59,7 @@ export default function App() {
         <Route path="/packages" element={<PackagesPage />} />
         <Route path="/packages/:id" element={<PackageDetailPage />} />
         <Route path="/about" element={<AboutPage />} />
+        <Route path="/support" element={<SupportPage />} />
         <Route
           path="/kyc"
           element={
@@ -258,6 +261,14 @@ export default function App() {
         element={
           <RequireAuth>
             <AdminAnnouncementsPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin/support"
+        element={
+          <RequireAuth>
+            <AdminSupportPage />
           </RequireAuth>
         }
       />

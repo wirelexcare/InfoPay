@@ -25,6 +25,7 @@ import {
   rewardClaims,
   rewardPoolAudit,
   announcements,
+  supportSettings,
 } from "../db/schema.js";
 import {
   requireAuth,
@@ -2220,6 +2221,83 @@ adminRouter.delete(
     } catch (error) {
       console.error("Error deleting announcement:", error);
       res.status(500).json({ error: "Failed to delete announcement" });
+    }
+  },
+);
+
+// ============ SUPPORT SETTINGS ============
+
+const supportSettingsSchema = z.object({
+  whatsappChannelUrl: z.string().trim().url().max(500).or(z.literal("")).optional(),
+  telegramGroupUrl: z.string().trim().url().max(500).or(z.literal("")).optional(),
+  telegramProfiles: z
+    .array(
+      z.object({
+        label: z.string().trim().max(60).optional().default(""),
+        url: z.string().trim().url().max(500),
+      }),
+    )
+    .max(10)
+    .optional()
+    .default([]),
+});
+
+adminRouter.get(
+  "/support-settings",
+  requirePermission("support.manage"),
+  async (_req: AuthedRequest, res) => {
+    try {
+      const [row] = await db.select().from(supportSettings).limit(1);
+      res.json({
+        data: row ?? {
+          whatsappChannelUrl: "",
+          telegramGroupUrl: "",
+          telegramProfiles: [],
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching support settings:", error);
+      res.status(500).json({ error: "Failed to fetch support settings" });
+    }
+  },
+);
+
+adminRouter.put(
+  "/support-settings",
+  requirePermission("support.manage"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const parsed = supportSettingsSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+      }
+      const values = {
+        whatsappChannelUrl: parsed.data.whatsappChannelUrl?.trim() || null,
+        telegramGroupUrl: parsed.data.telegramGroupUrl?.trim() || null,
+        telegramProfiles: (parsed.data.telegramProfiles ?? []).map((p) => ({
+          label: p.label?.trim() || "",
+          url: p.url.trim(),
+        })),
+        updatedAt: new Date(),
+      };
+
+      const [existing] = await db.select({ id: supportSettings.id }).from(supportSettings).limit(1);
+      let row;
+      if (existing) {
+        [row] = await db
+          .update(supportSettings)
+          .set(values)
+          .where(eq(supportSettings.id, existing.id))
+          .returning();
+      } else {
+        [row] = await db.insert(supportSettings).values(values).returning();
+      }
+
+      await logAdminAction(req.user!.userId, "UPDATE_SUPPORT_SETTINGS", "support_settings", row.id);
+      res.json({ data: row });
+    } catch (error) {
+      console.error("Error updating support settings:", error);
+      res.status(500).json({ error: "Failed to update support settings" });
     }
   },
 );

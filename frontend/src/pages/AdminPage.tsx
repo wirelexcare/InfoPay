@@ -15,6 +15,7 @@ import {
   Smartphone,
   Trophy,
   Megaphone,
+  Headphones,
 } from "lucide-react";
 
 interface DashboardData {
@@ -103,6 +104,7 @@ export function AdminPage() {
     { label: "Mobile Money Deposits", icon: Smartphone, to: "/admin/deposits" },
     { label: "Reward Pools", icon: Trophy, to: "/admin/rewards" },
     { label: "Announcements", icon: Megaphone, to: "/admin/announcements" },
+    { label: "Support Links", icon: Headphones, to: "/admin/support" },
   ];
 
   return (

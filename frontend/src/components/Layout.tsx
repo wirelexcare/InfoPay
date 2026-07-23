@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
-import { Building2, Gift, LayoutDashboard, LogOut, PieChart, Settings } from "lucide-react";
+import { Building2, Gift, Headphones, LayoutDashboard, LogOut, PieChart, Settings } from "lucide-react";
 import { useAuthStore } from "../lib/store";
+import { api } from "../lib/api";
 import { AnnouncementOverlay } from "./AnnouncementOverlay";
 
 const TABS = [
@@ -19,6 +21,23 @@ export function Layout() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const onHero = HERO_ROUTES.has(pathname);
+
+  // Show the support entry point only when at least one channel is configured.
+  const [hasSupport, setHasSupport] = useState(false);
+  useEffect(() => {
+    api
+      .get("/api/support")
+      .then(({ data }) => {
+        setHasSupport(
+          !!(
+            data.whatsappChannelUrl ||
+            data.telegramGroupUrl ||
+            (data.telegramProfiles?.length ?? 0) > 0
+          ),
+        );
+      })
+      .catch(() => setHasSupport(false));
+  }, []);
 
   function handleLogout() {
     logout();
@@ -51,6 +70,16 @@ export function Layout() {
           </Link>
           {user ? (
             <div className="flex items-center gap-2">
+              {hasSupport && (
+                <Link
+                  to="/support"
+                  className={`grid h-9 w-9 place-items-center rounded-full border transition active:scale-95 ${iconBtn}`}
+                  aria-label="Support"
+                  title="Support"
+                >
+                  <Headphones size={16} />
+                </Link>
+              )}
               {user.role === "admin" && (
                 <Link
                   to="/admin"

@@ -50,6 +50,7 @@ export const ADMIN_SCOPES = [
   "deposits.manage",
   "rewards.manage",
   "announcements.manage",
+  "support.manage",
 ] as const;
 
 export type AdminScope = (typeof ADMIN_SCOPES)[number];

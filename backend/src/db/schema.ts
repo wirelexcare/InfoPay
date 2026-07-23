@@ -481,3 +481,14 @@ export const announcements = pgTable("announcements", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+export const supportSettings = pgTable("support_settings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  whatsappChannelUrl: text("whatsapp_channel_url"),
+  telegramGroupUrl: text("telegram_group_url"),
+  telegramProfiles: jsonb("telegram_profiles")
+    .$type<{ label: string; url: string }[]>()
+    .notNull()
+    .default([]),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
