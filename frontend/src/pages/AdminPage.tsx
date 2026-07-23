@@ -134,36 +134,12 @@ export function AdminPage() {
     { label: "Live Chats", icon: MessageSquare, to: "/admin/chats" },
   ];
 
-  // Most-used destinations, surfaced as quick tiles on small screens
+  // Most-used destinations, surfaced as a bottom nav on small screens
   const quickNav = [
-    {
-      label: "Live Chats",
-      icon: MessageSquare,
-      to: "/admin/chats",
-      tile: "bg-sky-100",
-      fg: "text-sky-600",
-    },
-    {
-      label: "Reward Pools",
-      icon: Trophy,
-      to: "/admin/rewards",
-      tile: "bg-indigo-100",
-      fg: "text-indigo-600",
-    },
-    {
-      label: "MoMo Deposits",
-      icon: Smartphone,
-      to: "/admin/deposits",
-      tile: "bg-emerald-100",
-      fg: "text-emerald-600",
-    },
-    {
-      label: "Users",
-      icon: Users,
-      to: "/admin/users",
-      tile: "bg-amber-100",
-      fg: "text-amber-600",
-    },
+    { label: "Chats", icon: MessageSquare, to: "/admin/chats" },
+    { label: "Rewards", icon: Trophy, to: "/admin/rewards" },
+    { label: "Deposits", icon: Smartphone, to: "/admin/deposits" },
+    { label: "Users", icon: Users, to: "/admin/users" },
   ];
 
   return (
@@ -273,33 +249,8 @@ export function AdminPage() {
           </div>
         </nav>
 
-        <main className="min-w-0 flex-1 p-4 sm:p-6">
+        <main className="min-w-0 flex-1 p-4 pb-28 sm:p-6 lg:pb-6">
           <div className="mx-auto max-w-7xl">
-            {/* Mobile: quick access to the most-used admin pages */}
-            <div className="mb-6 grid grid-cols-4 gap-2 lg:hidden">
-              {quickNav.map(({ label, icon: Icon, to, tile, fg }) => (
-                <button
-                  key={to}
-                  onClick={() => navigate(to)}
-                  className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-card px-1 py-3 transition active:scale-95 hover:border-primary/30"
-                >
-                  <span
-                    className={`relative grid h-11 w-11 place-items-center rounded-2xl ${tile} ${fg}`}
-                  >
-                    <Icon size={19} strokeWidth={2.1} />
-                    {to === "/admin/chats" && chatUnread > 0 && (
-                      <span className="absolute -right-1 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-                        {chatUnread > 99 ? "99+" : chatUnread}
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-center text-[10px] font-semibold leading-tight text-ink-700">
-                    {label}
-                  </span>
-                </button>
-              ))}
-            </div>
-
             <h2 className="mb-6 text-xl font-bold sm:text-2xl">Financial Overview</h2>
 
             {loading ? (
@@ -367,6 +318,29 @@ export function AdminPage() {
           </div>
         </main>
       </div>
+
+      {/* Mobile: bottom nav with the most-used admin pages */}
+      <nav className="safe-bottom fixed inset-x-0 bottom-0 z-20 px-4 pb-3 lg:hidden">
+        <div className="mx-auto flex w-full max-w-sm items-center justify-around gap-1 rounded-2xl border border-border/70 bg-card/90 p-1.5 shadow-soft-lg backdrop-blur-md">
+          {quickNav.map(({ label, icon: Icon, to }) => (
+            <button
+              key={to}
+              onClick={() => navigate(to)}
+              className="relative flex flex-1 flex-col items-center gap-0.5 rounded-xl px-2 py-2 text-[11px] font-semibold text-ink-400 transition hover:text-ink-600 active:scale-95"
+            >
+              <span className="relative">
+                <Icon size={19} strokeWidth={2.25} />
+                {to === "/admin/chats" && chatUnread > 0 && (
+                  <span className="absolute -right-2 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+                    {chatUnread > 99 ? "99+" : chatUnread}
+                  </span>
+                )}
+              </span>
+              {label}
+            </button>
+          ))}
+        </div>
+      </nav>
     </div>
   );
 }
