@@ -134,6 +134,38 @@ export function AdminPage() {
     { label: "Live Chats", icon: MessageSquare, to: "/admin/chats" },
   ];
 
+  // Most-used destinations, surfaced as quick tiles on small screens
+  const quickNav = [
+    {
+      label: "Live Chats",
+      icon: MessageSquare,
+      to: "/admin/chats",
+      tile: "bg-sky-100",
+      fg: "text-sky-600",
+    },
+    {
+      label: "Reward Pools",
+      icon: Trophy,
+      to: "/admin/rewards",
+      tile: "bg-indigo-100",
+      fg: "text-indigo-600",
+    },
+    {
+      label: "MoMo Deposits",
+      icon: Smartphone,
+      to: "/admin/deposits",
+      tile: "bg-emerald-100",
+      fg: "text-emerald-600",
+    },
+    {
+      label: "Users",
+      icon: Users,
+      to: "/admin/users",
+      tile: "bg-amber-100",
+      fg: "text-amber-600",
+    },
+  ];
+
   return (
     <div className="min-h-[100dvh] bg-background">
       <header className="sticky top-0 z-20 border-b border-border bg-card/80 backdrop-blur-md">
@@ -243,6 +275,31 @@ export function AdminPage() {
 
         <main className="min-w-0 flex-1 p-4 sm:p-6">
           <div className="mx-auto max-w-7xl">
+            {/* Mobile: quick access to the most-used admin pages */}
+            <div className="mb-6 grid grid-cols-4 gap-2 lg:hidden">
+              {quickNav.map(({ label, icon: Icon, to, tile, fg }) => (
+                <button
+                  key={to}
+                  onClick={() => navigate(to)}
+                  className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-card px-1 py-3 transition active:scale-95 hover:border-primary/30"
+                >
+                  <span
+                    className={`relative grid h-11 w-11 place-items-center rounded-2xl ${tile} ${fg}`}
+                  >
+                    <Icon size={19} strokeWidth={2.1} />
+                    {to === "/admin/chats" && chatUnread > 0 && (
+                      <span className="absolute -right-1 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                        {chatUnread > 99 ? "99+" : chatUnread}
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-center text-[10px] font-semibold leading-tight text-ink-700">
+                    {label}
+                  </span>
+                </button>
+              ))}
+            </div>
+
             <h2 className="mb-6 text-xl font-bold sm:text-2xl">Financial Overview</h2>
 
             {loading ? (
