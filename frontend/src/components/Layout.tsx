@@ -1,7 +1,6 @@
 import { Link, NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { Building2, Gift, LayoutDashboard, LogOut, PieChart, Settings } from "lucide-react";
 import { useAuthStore } from "../lib/store";
-import { Toaster } from "./ui/sonner";
 
 const TABS = [
   { to: "/packages", label: "Packages", icon: Building2 },
@@ -120,8 +119,6 @@ export function Layout() {
           </div>
         </nav>
       )}
-
-      <Toaster />
     </div>
   );
 }

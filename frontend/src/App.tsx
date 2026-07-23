@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { Layout } from "./components/Layout";
+import { Toaster } from "./components/ui/sonner";
 import { useAuthStore } from "./lib/store";
 import { LoginPage } from "./pages/LoginPage";
 import { SignupPage } from "./pages/SignupPage";
@@ -45,6 +46,7 @@ function Landing() {
 
 export default function App() {
   return (
+    <>
     <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<Landing />} />
@@ -251,5 +253,7 @@ export default function App() {
 
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
+    <Toaster />
+    </>
   );
 }
