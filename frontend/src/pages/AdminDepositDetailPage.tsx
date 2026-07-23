@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
+import { AdminUserDetailModal } from "../components/AdminUserDetailModal";
 
 interface DepositDetail {
   id: string;
@@ -38,6 +39,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 export function AdminDepositDetailPage() {
   const { depositId } = useParams();
   const navigate = useNavigate();
+  const [viewUserId, setViewUserId] = useState<string | null>(null);
   const [deposit, setDeposit] = useState<DepositDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
@@ -166,7 +168,7 @@ export function AdminDepositDetailPage() {
               <Row label="Country" value={deposit.user.country} />
               <Row label="KYC Status" value={deposit.user.kycStatus} />
               <button
-                onClick={() => navigate(`/admin/users/${deposit.user!.id}`)}
+                onClick={() => setViewUserId(deposit.user!.id)}
                 className="mt-3 text-sm font-medium text-primary hover:underline"
               >
                 View full user profile →
@@ -205,6 +207,13 @@ export function AdminDepositDetailPage() {
           </a>
         </div>
       </div>
+
+      {viewUserId && (
+        <AdminUserDetailModal
+          userId={viewUserId}
+          onClose={() => setViewUserId(null)}
+        />
+      )}
     </div>
   );
 }

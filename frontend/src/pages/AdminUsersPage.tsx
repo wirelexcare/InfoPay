@@ -4,6 +4,7 @@ import { Search, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { Pagination } from "../components/ui/pagination";
+import { AdminUserDetailModal } from "../components/AdminUserDetailModal";
 
 interface User {
   id: string;
@@ -22,6 +23,7 @@ export function AdminUsersPage() {
   const [kycFilter, setKycFilter] = useState("");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [viewUserId, setViewUserId] = useState<string | null>(null);
   const limit = 50;
 
   const fetchUsers = async (p: number) => {
@@ -50,7 +52,7 @@ export function AdminUsersPage() {
   }, [search, kycFilter]);
 
   const handleViewUser = (userId: string) => {
-    navigate(`/admin/users/${userId}`);
+    setViewUserId(userId);
   };
 
   const kycStatusColors = {
@@ -199,6 +201,17 @@ export function AdminUsersPage() {
           />
         )}
       </div>
+
+      {viewUserId && (
+        <AdminUserDetailModal
+          userId={viewUserId}
+          onClose={() => {
+            setViewUserId(null);
+            // Refresh the list in case suspension/role changed
+            fetchUsers(page);
+          }}
+        />
+      )}
     </div>
   );
 }

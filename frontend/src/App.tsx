@@ -15,7 +15,6 @@ import { ReferralDashboardPage } from "./pages/ReferralDashboardPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { AdminPage } from "./pages/AdminPage";
 import { AdminUsersPage } from "./pages/AdminUsersPage";
-import { AdminUserDetailPage } from "./pages/AdminUserDetailPage";
 import { AdminKycPage } from "./pages/AdminKycPage";
 import { AdminPackagesPage } from "./pages/AdminPackagesPage";
 import { AdminPackageEditPage } from "./pages/AdminPackageEditPage";
@@ -136,14 +135,6 @@ export default function App() {
         element={
           <RequireAuth>
             <AdminUsersPage />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/admin/users/:userId"
-        element={
-          <RequireAuth>
-            <AdminUserDetailPage />
           </RequireAuth>
         }
       />

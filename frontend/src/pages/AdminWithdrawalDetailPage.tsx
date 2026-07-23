@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
+import { AdminUserDetailModal } from "../components/AdminUserDetailModal";
 
 interface WithdrawalDetail {
   id: string;
@@ -48,6 +49,7 @@ export function AdminWithdrawalDetailPage() {
   const navigate = useNavigate();
   const [txn, setTxn] = useState<WithdrawalDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [viewUserId, setViewUserId] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
 
   const fetchTxn = async () => {
@@ -163,7 +165,7 @@ export function AdminWithdrawalDetailPage() {
               <Row label="Country" value={txn.user.country} />
               <Row label="KYC Status" value={txn.user.kycStatus} />
               <button
-                onClick={() => navigate(`/admin/users/${txn.user!.id}`)}
+                onClick={() => setViewUserId(txn.user!.id)}
                 className="mt-3 text-sm font-medium text-primary hover:underline"
               >
                 View full user profile →
@@ -223,6 +225,13 @@ export function AdminWithdrawalDetailPage() {
           <Row label="Requested" value={new Date(txn.createdAt).toLocaleString()} />
         </div>
       </div>
+
+      {viewUserId && (
+        <AdminUserDetailModal
+          userId={viewUserId}
+          onClose={() => setViewUserId(null)}
+        />
+      )}
     </div>
   );
 }

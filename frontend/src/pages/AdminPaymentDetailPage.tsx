@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
+import { AdminUserDetailModal } from "../components/AdminUserDetailModal";
 
 interface PaymentDetail {
   id: string;
@@ -45,6 +46,7 @@ export function AdminPaymentDetailPage() {
   const navigate = useNavigate();
   const [payment, setPayment] = useState<PaymentDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [viewUserId, setViewUserId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchPayment = async () => {
@@ -106,7 +108,7 @@ export function AdminPaymentDetailPage() {
               <Row label="Country" value={payment.user.country} />
               <Row label="KYC Status" value={payment.user.kycStatus} />
               <button
-                onClick={() => navigate(`/admin/users/${payment.user!.id}`)}
+                onClick={() => setViewUserId(payment.user!.id)}
                 className="mt-3 text-sm font-medium text-primary hover:underline"
               >
                 View full user profile →
@@ -147,6 +149,13 @@ export function AdminPaymentDetailPage() {
           />
         </div>
       </div>
+
+      {viewUserId && (
+        <AdminUserDetailModal
+          userId={viewUserId}
+          onClose={() => setViewUserId(null)}
+        />
+      )}
     </div>
   );
 }
