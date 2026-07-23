@@ -23,7 +23,7 @@ import {
   validateBankAccountName,
   getGhanaBanks,
 } from "../lib/moolre.js";
-import { CRYPTO_MIN_WITHDRAW_USD } from "../lib/nowpayments.js";
+import { CRYPTO_MIN_WITHDRAW_USD } from "../lib/binance.js";
 import { getGhsPerUsd } from "../lib/fx.js";
 import { generateDepositReference } from "../lib/manualDeposits.js";
 import { uploadPaymentScreenshot } from "../lib/storage.js";

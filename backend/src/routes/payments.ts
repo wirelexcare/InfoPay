@@ -10,12 +10,13 @@ import {
 } from "../db/schema.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
 import { getPaymentRules } from "../lib/paymentSettings.js";
+import type { RequestWithRawBody } from "../app.js";
 import {
   createCryptoPayment,
   getCryptoDepositQuote,
-  verifyIpnSignature,
+  verifyWebhookSignature,
   CRYPTO_MIN_WITHDRAW_USD,
-} from "../lib/nowpayments.js";
+} from "../lib/binance.js";
 
 export const paymentsRouter = Router();
 
@@ -134,7 +135,7 @@ paymentsRouter.post(
       .insert(cryptoPayments)
       .values({
         userId,
-        network: "TRC20",
+        network: "BEP20",
         asset: "USDT",
         amount: result.payAmount!,
         status: "waiting",
@@ -142,49 +143,64 @@ paymentsRouter.post(
         amountGhs: amountGhs.toFixed(2),
         payAmount: result.payAmount,
         payCurrency: result.payCurrency,
-        payAddress: result.payAddress,
+        checkoutUrl: result.checkoutUrl,
+        qrcodeLink: result.qrcodeLink,
       })
       .returning();
 
     res.status(201).json({
       paymentId: payment.id,
-      payAddress: result.payAddress,
       payAmount: result.payAmount,
       payCurrency: result.payCurrency,
+      checkoutUrl: result.checkoutUrl,
+      qrcodeLink: result.qrcodeLink,
     });
   },
 );
 
-paymentsRouter.post("/crypto/ipn", async (req, res) => {
-  const signature = req.headers["x-nowpayments-sig"] as string | undefined;
-  if (!verifyIpnSignature(req.body, signature)) {
-    return res.status(401).json({ error: "Invalid signature" });
+// Binance Pay webhook. Configure this route's full URL as the merchant
+// webhook endpoint in the Binance Merchant portal.
+paymentsRouter.post("/crypto/binance-webhook", async (req: RequestWithRawBody, res) => {
+  const timestamp = req.headers["binancepay-timestamp"] as string | undefined;
+  const nonce = req.headers["binancepay-nonce"] as string | undefined;
+  const signature = req.headers["binancepay-signature"] as string | undefined;
+
+  if (!verifyWebhookSignature(req.rawBody ?? "", timestamp, nonce, signature)) {
+    return res.status(401).json({ returnCode: "FAIL", returnMessage: "Invalid signature" });
   }
 
-  const { payment_id, payment_status } = req.body as {
-    payment_id?: number | string;
-    payment_status?: string;
+  const { bizStatus, data } = req.body as {
+    bizStatus?: string;
+    data?: string;
   };
-  if (!payment_id || !payment_status) {
-    return res.status(400).json({ error: "Missing payment_id or payment_status" });
+  const parsedData = (() => {
+    try {
+      return data ? (JSON.parse(data) as { prepayId?: string }) : null;
+    } catch {
+      return null;
+    }
+  })();
+  const prepayId = parsedData?.prepayId;
+  if (!prepayId || !bizStatus) {
+    return res.status(400).json({ returnCode: "FAIL", returnMessage: "Missing prepayId or bizStatus" });
   }
 
   const [record] = await db
     .select()
     .from(cryptoPayments)
-    .where(eq(cryptoPayments.providerPaymentId, String(payment_id)))
+    .where(eq(cryptoPayments.providerPaymentId, prepayId))
     .limit(1);
   if (!record) {
-    return res.status(404).json({ error: "Payment not found" });
+    return res.status(404).json({ returnCode: "FAIL", returnMessage: "Payment not found" });
   }
 
-  const alreadyCredited = record.status === "finished";
+  const alreadyCredited = record.status === "PAY_SUCCESS";
   await db
     .update(cryptoPayments)
-    .set({ status: payment_status, confirmed: payment_status === "finished" })
+    .set({ status: bizStatus, confirmed: bizStatus === "PAY_SUCCESS" })
     .where(eq(cryptoPayments.id, record.id));
 
-  if (payment_status === "finished" && !alreadyCredited && record.amountGhs) {
+  if (bizStatus === "PAY_SUCCESS" && !alreadyCredited && record.amountGhs) {
     // The deposit fee was already charged on top at invoice time, so the
     // stored amountGhs is exactly what the user gets credited.
     const amount = Number(record.amountGhs);
@@ -219,10 +235,10 @@ paymentsRouter.post("/crypto/ipn", async (req, res) => {
       balanceAfterGhs: balanceAfter.toFixed(2),
       status: "completed",
       method: "crypto",
-      reference: String(payment_id),
-      description: "Deposit via USDT (TRC20)",
+      reference: prepayId,
+      description: "Deposit via USDT (Binance Pay)",
     });
   }
 
-  res.status(200).json({ received: true });
+  res.status(200).json({ returnCode: "SUCCESS", returnMessage: null });
 });

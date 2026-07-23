@@ -313,9 +313,10 @@ export function WalletPage() {
   const [selectedTx, setSelectedTx] = useState<WalletTransaction | null>(null);
 
   const [cryptoInvoice, setCryptoInvoice] = useState<{
-    payAddress: string;
     payAmount: string;
     payCurrency: string;
+    checkoutUrl?: string;
+    qrcodeLink?: string;
   } | null>(null);
 
   const [cryptoQuote, setCryptoQuote] = useState<{
@@ -382,9 +383,10 @@ export function WalletPage() {
           amountGhs: depositAmount,
         });
         setCryptoInvoice({
-          payAddress: data.payAddress,
           payAmount: data.payAmount,
           payCurrency: data.payCurrency,
+          checkoutUrl: data.checkoutUrl,
+          qrcodeLink: data.qrcodeLink,
         });
         setDepositAmount("");
       } else if (depositMethod === "chat") {
@@ -451,10 +453,10 @@ export function WalletPage() {
     }
   }
 
-  async function copyAddress() {
-    if (!cryptoInvoice) return;
-    await navigator.clipboard.writeText(cryptoInvoice.payAddress);
-    toast.success("Address copied");
+  async function copyCheckoutLink() {
+    if (!cryptoInvoice?.checkoutUrl) return;
+    await navigator.clipboard.writeText(cryptoInvoice.checkoutUrl);
+    toast.success("Link copied");
   }
 
   async function handleWithdraw(e: FormEvent) {
@@ -921,42 +923,60 @@ export function WalletPage() {
 
       <Sheet open={!!cryptoInvoice} onOpenChange={(open) => !open && setCryptoInvoice(null)}>
         {cryptoInvoice && (
-          <SheetContent title="Send USDT to complete deposit">
+          <SheetContent title="Complete your deposit with Binance Pay">
             <div className="space-y-4">
               <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                Send exactly the amount below on the <strong>TRC20</strong>{" "}
-                network. Your wallet is credited automatically once the
-                network confirms — no need to stay on this screen.
+                Pay with Binance Pay to complete this deposit. Your wallet is
+                credited automatically once the payment confirms — no need to
+                stay on this screen.
               </div>
 
               <div className="text-center">
                 <p className="text-xs font-medium uppercase tracking-wide text-ink-400">
-                  Amount to send
+                  Amount to pay
                 </p>
                 <p className="mt-1 text-2xl font-extrabold tracking-tight text-ink-900">
                   {cryptoInvoice.payAmount} {cryptoInvoice.payCurrency?.toUpperCase()}
                 </p>
               </div>
 
-              <div>
-                <Label>Deposit address (TRC20)</Label>
+              {cryptoInvoice.qrcodeLink && (
+                <div className="flex justify-center">
+                  <img
+                    src={cryptoInvoice.qrcodeLink}
+                    alt="Scan with Binance app"
+                    className="h-48 w-48 rounded-xl border border-border bg-white p-2"
+                  />
+                </div>
+              )}
+
+              {cryptoInvoice.checkoutUrl && (
                 <div className="flex items-center gap-2 rounded-xl border border-input bg-card px-4 py-3 shadow-soft">
-                  <code className="min-w-0 flex-1 break-all text-xs text-ink-900">
-                    {cryptoInvoice.payAddress}
+                  <code className="min-w-0 flex-1 truncate text-xs text-ink-900">
+                    {cryptoInvoice.checkoutUrl}
                   </code>
                   <button
                     type="button"
-                    onClick={copyAddress}
+                    onClick={copyCheckoutLink}
                     className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-400 transition hover:bg-ink-100 hover:text-ink-900 active:scale-95"
-                    aria-label="Copy address"
+                    aria-label="Copy checkout link"
                   >
                     <Copy size={15} />
                   </button>
                 </div>
-              </div>
+              )}
+
+              {cryptoInvoice.checkoutUrl && (
+                <Button asChild size="lg" className="w-full">
+                  <a href={cryptoInvoice.checkoutUrl} target="_blank" rel="noopener noreferrer">
+                    Open Binance Pay
+                  </a>
+                </Button>
+              )}
 
               <Button
                 onClick={() => setCryptoInvoice(null)}
+                variant="outline"
                 size="lg"
                 className="w-full"
               >

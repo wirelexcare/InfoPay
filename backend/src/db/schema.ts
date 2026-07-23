@@ -230,12 +230,14 @@ export const cryptoPayments = pgTable("crypto_payments", {
   txHash: varchar("tx_hash", { length: 255 }),
   confirmed: boolean("confirmed").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-  // NOWPayments fields
+  // Binance Pay fields (providerPaymentId stores the prepayId)
   providerPaymentId: varchar("provider_payment_id", { length: 100 }),
   amountGhs: numeric("amount_ghs", { precision: 14, scale: 2 }),
   payAmount: numeric("pay_amount", { precision: 20, scale: 8 }),
   payCurrency: varchar("pay_currency", { length: 20 }),
   payAddress: varchar("pay_address", { length: 255 }),
+  checkoutUrl: text("checkout_url"),
+  qrcodeLink: text("qrcode_link"),
   status: varchar("status", { length: 30 }).notNull().default("waiting"),
 });
 

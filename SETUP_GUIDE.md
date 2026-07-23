@@ -65,15 +65,17 @@ npm run dev            # Starts on http://localhost:5173
    MOOLRE_ACCOUNT_NUMBER=your_account_number
    ```
 
-#### Crypto (USDT)
-1. Sign up at https://nowpayments.io
-2. Get API key from Settings
+#### Crypto (USDT via Binance Pay)
+1. Create a merchant account at https://merchant.binance.com
+2. Generate an API key/secret in the Developer Center
 3. Update `backend/.env`:
    ```
-   NOWPAYMENTS_API_KEY=your_api_key
-   NOWPAYMENTS_IPN_SECRET=your_ipn_secret
-   NOWPAYMENTS_IPN_CALLBACK_URL=https://your-domain.com/api/payments/crypto/ipn
+   BINANCE_PAY_API_KEY=your_api_key
+   BINANCE_PAY_SECRET_KEY=your_secret_key
+   BINANCE_PAY_WEBHOOK_URL=https://your-domain.com/api/payments/crypto/binance-webhook
    ```
+4. Set that same webhook URL in the Binance Merchant portal so payment
+   confirmations reach your server
 
 ---
 
@@ -134,5 +136,5 @@ See `render.yaml` for all required env vars.
 For issues with:
 - **Supabase**: https://supabase.com/docs
 - **Paystack**: https://paystack.com/docs
-- **NOWPayments**: https://nowpayments.io/help-center
+- **Binance Pay**: https://developers.binance.com/docs/binance-pay
 - **Render**: https://render.com/docs
