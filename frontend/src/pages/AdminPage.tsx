@@ -17,6 +17,8 @@ import {
   Megaphone,
   Headphones,
   MessageSquare,
+  Menu,
+  X,
 } from "lucide-react";
 
 interface DashboardData {
@@ -33,6 +35,7 @@ export function AdminPage() {
   const navigate = useNavigate();
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     if (user?.role !== "admin") {
@@ -135,7 +138,16 @@ export function AdminPage() {
     <div className="min-h-[100dvh] bg-background">
       <header className="sticky top-0 z-20 border-b border-border bg-card/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6">
-          <h1 className="text-lg font-bold sm:text-xl">Admin Dashboard</h1>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setMenuOpen(true)}
+              className="grid h-9 w-9 place-items-center rounded-lg border border-border text-ink-600 transition hover:bg-ink-50 lg:hidden"
+              aria-label="Open menu"
+            >
+              <Menu size={18} />
+            </button>
+            <h1 className="text-lg font-bold sm:text-xl">Admin Dashboard</h1>
+          </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => navigate("/admin/chats")}
@@ -168,20 +180,49 @@ export function AdminPage() {
           </div>
         </div>
 
-        {/* Mobile: horizontal scrolling nav */}
-        <nav className="no-scrollbar flex gap-2 overflow-x-auto px-4 pb-3 lg:hidden">
-          {navItems.map((item) => (
-            <button
-              key={item.to}
-              onClick={() => navigate(item.to)}
-              className="flex shrink-0 items-center gap-2 rounded-full border border-border bg-card px-3.5 py-2 text-xs font-medium text-ink-600 transition hover:border-primary/30 hover:text-primary"
-            >
-              <item.icon size={15} />
-              {item.label}
-            </button>
-          ))}
-        </nav>
       </header>
+
+      {/* Mobile: slide-in side menu */}
+      {menuOpen && (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setMenuOpen(false)}
+          />
+          <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-card shadow-soft-lg animate-in slide-in-from-left duration-200">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3.5">
+              <p className="text-sm font-bold text-ink-900">Admin Menu</p>
+              <button
+                onClick={() => setMenuOpen(false)}
+                className="grid h-9 w-9 place-items-center rounded-lg text-ink-500 transition hover:bg-ink-50 hover:text-ink-900"
+                aria-label="Close menu"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <nav className="flex-1 space-y-1 overflow-y-auto p-3">
+              {navItems.map((item) => (
+                <button
+                  key={item.to}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    navigate(item.to);
+                  }}
+                  className="flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium text-ink-600 transition hover:bg-primary/10 hover:text-primary"
+                >
+                  <item.icon size={18} />
+                  {item.label}
+                  {item.to === "/admin/chats" && chatUnread > 0 && (
+                    <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white">
+                      {chatUnread > 99 ? "99+" : chatUnread}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </nav>
+          </div>
+        </div>
+      )}
 
       <div className="flex">
         {/* Desktop: vertical sidebar */}
