@@ -25,6 +25,12 @@ interface ChatUser {
   phone: string;
 }
 
+interface MomoSettings {
+  network: string;
+  accountName: string;
+  accountNumber: string;
+}
+
 const DEPOSIT_STATUS_STYLES: Record<ChatDeposit["status"], string> = {
   pending: "bg-amber-100 text-amber-700",
   approved: "bg-green-100 text-green-700",
@@ -48,6 +54,15 @@ export function AdminChatDetailPage() {
   const [actingDepositId, setActingDepositId] = useState<string | null>(null);
   const [rejectingDeposit, setRejectingDeposit] = useState<ChatDeposit | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+
+  // Receiving MoMo account, used by the payment-instructions template
+  const [momoSettings, setMomoSettings] = useState<MomoSettings | null>(null);
+  useEffect(() => {
+    api
+      .get("/api/admin/deposit-settings")
+      .then(({ data }) => setMomoSettings(data.data ?? null))
+      .catch(() => {});
+  }, []);
 
   // Credit wallet dialog state
   const [creditOpen, setCreditOpen] = useState(false);
@@ -223,30 +238,58 @@ export function AdminChatDetailPage() {
     }
   }
 
-  function openCreditDialog() {
-    // Prefill with the most recent amount the user asked for, either a
-    // live-chat top-up message or a pending deposit card; stays editable.
-    let amount = "";
+  // The most recent amount the user asked for, either a live-chat top-up
+  // message or a pending deposit card; "" when none found.
+  function findRequestedAmount() {
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
       if (m.manualDepositId) {
         const deposit = deposits[m.manualDepositId];
         if (deposit?.status === "pending") {
-          amount = Number(deposit.amountGhs).toFixed(2);
-          break;
+          return Number(deposit.amountGhs).toFixed(2);
         }
       }
       if (m.senderRole === "user" && m.body && /top\s*up/i.test(m.body)) {
         const match = m.body.match(/GHS\s*([\d,]+(?:\.\d{1,2})?)/i);
-        if (match) {
-          amount = match[1].replace(/,/g, "");
-          break;
-        }
+        if (match) return match[1].replace(/,/g, "");
       }
     }
-    setCreditAmount(amount);
+    return "";
+  }
+
+  function openCreditDialog() {
+    setCreditAmount(findRequestedAmount());
     setCreditReason("Top-up via live chat");
     setCreditOpen(true);
+  }
+
+  // Canned replies for the top-up flow; clicking fills the composer so the
+  // admin can edit before sending.
+  function buildTemplates() {
+    const amount = findRequestedAmount();
+    const amountText = amount ? `GHS ${amount}` : "the amount";
+    const templates: { label: string; text: string }[] = [];
+    if (momoSettings) {
+      templates.push({
+        label: "Payment instructions",
+        text: `To top up ${amountText}, please send the payment to ${momoSettings.network.toUpperCase()} ${momoSettings.accountNumber} (${momoSettings.accountName}), then share your payment screenshot here in this chat.`,
+      });
+    }
+    templates.push(
+      {
+        label: "Request screenshot",
+        text: "Please send your payment screenshot here in the chat so we can confirm your top-up.",
+      },
+      {
+        label: "Payment received",
+        text: "We've received your payment and are confirming it now. Your wallet will be credited shortly.",
+      },
+      {
+        label: "Wallet credited",
+        text: `Your wallet has been credited with ${amountText}. Thank you!`,
+      },
+    );
+    return templates;
   }
 
   async function handleCredit(e: FormEvent) {
@@ -465,6 +508,19 @@ export function AdminChatDetailPage() {
 
         {/* Composer */}
         <div className="sticky bottom-0 z-20 border-t border-border bg-card/95 px-4 py-3 backdrop-blur-md">
+          {/* Quick reply templates */}
+          <div className="no-scrollbar mb-2 flex gap-1.5 overflow-x-auto">
+            {buildTemplates().map((t) => (
+              <button
+                key={t.label}
+                type="button"
+                onClick={() => setInput(t.text)}
+                className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-ink-600 transition hover:border-primary/40 hover:text-primary active:scale-95"
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
           {attachedImageUrl && (
             <div className="mb-2 flex items-center gap-2 rounded-xl border border-border bg-background p-2">
               <img
