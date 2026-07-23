@@ -533,14 +533,28 @@ export function WalletPage() {
                   limitsHint(
                     paymentRules.minDepositGhs,
                     paymentRules.maxDepositGhs,
-                    paymentRules.depositFeePct,
+                    0,
                   ) && (
                     <p className="mt-1 text-xs text-ink-400">
                       {limitsHint(
                         paymentRules.minDepositGhs,
                         paymentRules.maxDepositGhs,
-                        paymentRules.depositFeePct,
+                        0,
                       )}
+                    </p>
+                  )}
+                {paymentRules &&
+                  paymentRules.depositFeePct > 0 &&
+                  Number(depositAmount) > 0 && (
+                    <p className="mt-1 text-xs font-medium text-ink-600">
+                      You'll pay GHS{" "}
+                      {(
+                        Number(depositAmount) *
+                        (1 + paymentRules.depositFeePct / 100)
+                      ).toFixed(2)}{" "}
+                      (GHS {Number(depositAmount).toFixed(2)} +{" "}
+                      {paymentRules.depositFeePct}% fee) and receive GHS{" "}
+                      {Number(depositAmount).toFixed(2)} in your wallet
                     </p>
                   )}
               </div>
@@ -936,20 +950,32 @@ export function WalletPage() {
         {momoSheet && (
           <SheetContent title="Complete your mobile money deposit">
             <form onSubmit={handleMomoSubmit} className="space-y-4">
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                Pay{" "}
-                <strong>
-                  {formatCurrency(
-                    convertFromGhs(Number(momoSheet.amountGhs), currency),
-                    currency,
-                  )}
-                </strong>{" "}
-                to the account below, using{" "}
-                <strong>{momoSheet.reference}</strong> as the payment
-                reference. Then fill in the details you paid with and upload
-                your screenshot. Your wallet is credited after a quick manual
-                review — usually just a few minutes.
-              </div>
+              {(() => {
+                const feePct = paymentRules?.depositFeePct ?? 0;
+                const intended = Number(momoSheet.amountGhs);
+                const total = Math.round(intended * (1 + feePct / 100) * 100) / 100;
+                return (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    Pay{" "}
+                    <strong>
+                      {formatCurrency(convertFromGhs(total, currency), currency)}
+                    </strong>{" "}
+                    to the account below, using{" "}
+                    <strong>{momoSheet.reference}</strong> as the payment
+                    reference.
+                    {feePct > 0 && (
+                      <>
+                        {" "}
+                        This includes a {feePct}% fee; GHS{" "}
+                        {intended.toFixed(2)} will be credited to your wallet.
+                      </>
+                    )}{" "}
+                    Then fill in the details you paid with and upload your
+                    screenshot. Your wallet is credited after a quick manual
+                    review, usually just a few minutes.
+                  </div>
+                );
+              })()}
 
               <Card className="divide-y divide-border p-0">
                 <div className="flex items-center justify-between px-4 py-3 text-sm">

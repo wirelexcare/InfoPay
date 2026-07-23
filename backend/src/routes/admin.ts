@@ -39,7 +39,6 @@ import {
   type AuthedRequest,
 } from "../middleware/auth.js";
 import { runDailyRoiAccrual } from "../lib/roiAccrual.js";
-import { getPaymentRules } from "../lib/paymentSettings.js";
 import { uploadProjectImage, uploadPaymentScreenshot } from "../lib/storage.js";
 import { generateRewardPoolCode } from "../lib/rewardPoolCode.js";
 
@@ -1852,10 +1851,9 @@ adminRouter.post(
           : await db.select().from(wallets).where(eq(wallets.userId, deposit.userId)).limit(1);
 
       const balanceBefore = Number(currentWallet.balanceGhs);
-      const gross = Number(deposit.amountGhs);
-      const { depositFeePct } = await getPaymentRules();
-      const feeGhs = Math.round(gross * (depositFeePct / 100) * 100) / 100;
-      const amount = Math.round((gross - feeGhs) * 100) / 100;
+      // The deposit fee is charged on top (the user pays intended + fee), so
+      // the full stored amount is exactly what gets credited.
+      const amount = Number(deposit.amountGhs);
       const balanceAfter = balanceBefore + amount;
 
       await db
@@ -1872,10 +1870,7 @@ adminRouter.post(
         status: "completed",
         method: "momo",
         reference: deposit.reference,
-        description:
-          feeGhs > 0
-            ? `Manual mobile money deposit (${deposit.network}) · GHS ${gross.toFixed(2)} less ${depositFeePct}% fee`
-            : `Manual mobile money deposit (${deposit.network})`,
+        description: `Manual mobile money deposit (${deposit.network})`,
       });
 
       await db

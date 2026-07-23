@@ -120,7 +120,12 @@ paymentsRouter.post(
       });
     }
 
-    const result = await createCryptoPayment(userId, amountGhs);
+    // Fee is charged on top: the user pays intended + fee, and the full
+    // intended amount is what gets credited (stored in amountGhs).
+    const feeGhs = Math.round(amountGhs * (rules.depositFeePct / 100) * 100) / 100;
+    const payGhs = Math.round((amountGhs + feeGhs) * 100) / 100;
+
+    const result = await createCryptoPayment(userId, payGhs);
     if (!result.ok) {
       return res.status(400).json({ error: result.error });
     }
@@ -180,10 +185,9 @@ paymentsRouter.post("/crypto/ipn", async (req, res) => {
     .where(eq(cryptoPayments.id, record.id));
 
   if (payment_status === "finished" && !alreadyCredited && record.amountGhs) {
-    const gross = Number(record.amountGhs);
-    const { depositFeePct } = await getPaymentRules();
-    const feeGhs = Math.round(gross * (depositFeePct / 100) * 100) / 100;
-    const amount = Math.round((gross - feeGhs) * 100) / 100;
+    // The deposit fee was already charged on top at invoice time, so the
+    // stored amountGhs is exactly what the user gets credited.
+    const amount = Number(record.amountGhs);
 
     const [inserted] = await db
       .insert(wallets)
@@ -216,10 +220,7 @@ paymentsRouter.post("/crypto/ipn", async (req, res) => {
       status: "completed",
       method: "crypto",
       reference: String(payment_id),
-      description:
-        feeGhs > 0
-          ? `Deposit via USDT (TRC20) · GHS ${gross.toFixed(2)} less ${depositFeePct}% fee`
-          : "Deposit via USDT (TRC20)",
+      description: "Deposit via USDT (TRC20)",
     });
   }
 
