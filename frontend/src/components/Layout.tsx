@@ -59,7 +59,7 @@ export function Layout() {
       >
         <div className="mx-auto flex w-full max-w-sm items-center justify-between px-4 py-3.5 sm:px-6">
           <Link to={user ? "/dashboard" : "/"} className="flex items-center gap-2 active:scale-95 transition">
-            <img src="/icon-192.png" alt="InfoPay" className="h-8 w-8 object-contain" />
+            <img src="/logo-mark.png" alt="InfoPay" className="h-8 w-8 rounded-lg object-contain" />
             <span
               className={`text-base font-bold tracking-tight ${
                 onHero ? "text-white" : "text-ink-900"
