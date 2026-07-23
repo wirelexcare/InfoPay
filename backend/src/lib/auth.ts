@@ -15,6 +15,8 @@ export interface JwtPayload {
   role: "investor" | "admin";
 }
 
+type TokenType = "access" | "refresh";
+
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 10);
 }
@@ -27,15 +29,31 @@ export async function verifyPassword(
 }
 
 export function signAccessToken(payload: JwtPayload): string {
-  return jwt.sign(payload, JWT_SECRET as string, { expiresIn: JWT_EXPIRY });
-}
-
-export function signRefreshToken(payload: JwtPayload): string {
-  return jwt.sign(payload, JWT_SECRET as string, {
-    expiresIn: REFRESH_TOKEN_EXPIRY,
+  return jwt.sign({ ...payload, type: "access" }, JWT_SECRET as string, {
+    expiresIn: JWT_EXPIRY,
+    algorithm: "HS256",
   });
 }
 
-export function verifyToken(token: string): JwtPayload {
-  return jwt.verify(token, JWT_SECRET as string) as JwtPayload;
+export function signRefreshToken(payload: JwtPayload): string {
+  return jwt.sign({ ...payload, type: "refresh" }, JWT_SECRET as string, {
+    expiresIn: REFRESH_TOKEN_EXPIRY,
+    algorithm: "HS256",
+  });
+}
+
+// Verify a token, pinning HS256 (rejects alg=none / algorithm confusion) and
+// optionally enforcing the token type so a long-lived refresh token can't be
+// presented as an access token on protected routes.
+export function verifyToken(
+  token: string,
+  expectedType: TokenType = "access",
+): JwtPayload {
+  const decoded = jwt.verify(token, JWT_SECRET as string, {
+    algorithms: ["HS256"],
+  }) as JwtPayload & { type?: TokenType };
+  if (decoded.type !== expectedType) {
+    throw new Error("Invalid token type");
+  }
+  return { userId: decoded.userId, role: decoded.role };
 }

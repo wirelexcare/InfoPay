@@ -57,15 +57,24 @@ export async function runDailyRoiAccrual() {
   const accruedSet = new Set(accruedToday.map((p) => p.investmentId));
 
   let accrued = 0;
+  let matured = 0;
 
   for (const inv of activeInvestments) {
-    if (accruedSet.has(inv.id)) continue;
-
     const durationDays = Number(inv.durationDays);
     const maturity = addDays(new Date(inv.createdAt), durationDays);
-    if (today >= maturity) continue;
 
-    if (durationDays <= 0) continue;
+    // Once the term is over, close the investment out so it stops showing as
+    // "active" forever. Its full ROI has already accrued across the period.
+    if (durationDays <= 0 || today >= maturity) {
+      await db
+        .update(investments)
+        .set({ status: "completed" })
+        .where(eq(investments.id, inv.id));
+      matured++;
+      continue;
+    }
+
+    if (accruedSet.has(inv.id)) continue;
 
     const amount = Number(inv.amountGhs);
     const totalReturn = amount * (Number(inv.expectedReturnPct) / 100);
@@ -85,6 +94,7 @@ export async function runDailyRoiAccrual() {
   return {
     processed: activeInvestments.length,
     credited: accrued,
+    matured,
     forfeited: forfeited.length,
   };
 }

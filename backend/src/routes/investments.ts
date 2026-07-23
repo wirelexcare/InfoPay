@@ -38,56 +38,64 @@ investmentsRouter.post("/", requireAuth, async (req: AuthedRequest, res) => {
 
   // Each package has one fixed investment amount — no range, no client input.
   const amountGhs = project.minInvestmentGhs;
-
-  const [wallet] = await db
-    .insert(wallets)
-    .values({ userId })
-    .onConflictDoNothing()
-    .returning();
-  const [currentWallet] =
-    wallet !== undefined
-      ? [wallet]
-      : await db.select().from(wallets).where(eq(wallets.userId, userId)).limit(1);
-
-  const balanceBefore = Number(currentWallet.balanceGhs);
   const amount = Number(amountGhs);
-  if (amount > balanceBefore) {
+
+  // Debit the stake, create the investment, and bump the portfolio in one
+  // transaction. The wallet debit is a guarded atomic UPDATE so concurrent
+  // invests can't spend the same balance twice (returns null if the funds
+  // aren't there anymore).
+  await db.insert(wallets).values({ userId }).onConflictDoNothing();
+
+  const investment = await db.transaction(async (tx) => {
+    const [debited] = await tx
+      .update(wallets)
+      .set({
+        balanceGhs: sql`${wallets.balanceGhs} - ${amount.toFixed(2)}`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(eq(wallets.userId, userId), gte(wallets.balanceGhs, amount.toFixed(2))),
+      )
+      .returning();
+    if (!debited) return null;
+
+    const balanceAfter = Number(debited.balanceGhs);
+    const balanceBefore = Math.round((balanceAfter + amount) * 100) / 100;
+
+    const [inv] = await tx
+      .insert(investments)
+      .values({ userId, projectId, amountGhs, status: "active" })
+      .returning();
+
+    await tx.insert(walletTransactions).values({
+      userId,
+      type: "investment",
+      amountGhs: amount.toFixed(2),
+      balanceBeforeGhs: balanceBefore.toFixed(2),
+      balanceAfterGhs: balanceAfter.toFixed(2),
+      status: "completed",
+      description: `Investment in ${project.title}`,
+    });
+
+    await tx
+      .insert(portfolios)
+      .values({ userId, totalInvestedGhs: amountGhs })
+      .onConflictDoUpdate({
+        target: portfolios.userId,
+        set: {
+          totalInvestedGhs: sql`${portfolios.totalInvestedGhs} + ${amountGhs}`,
+          updatedAt: new Date(),
+        },
+      });
+
+    return inv;
+  });
+
+  if (!investment) {
     return res.status(400).json({
       error: "Insufficient wallet balance. Top up your wallet first.",
     });
   }
-  const balanceAfter = balanceBefore - amount;
-
-  await db
-    .update(wallets)
-    .set({ balanceGhs: balanceAfter.toFixed(2), updatedAt: new Date() })
-    .where(eq(wallets.userId, userId));
-
-  const [investment] = await db
-    .insert(investments)
-    .values({ userId, projectId, amountGhs, status: "active" })
-    .returning();
-
-  await db.insert(walletTransactions).values({
-    userId,
-    type: "investment",
-    amountGhs: amount.toFixed(2),
-    balanceBeforeGhs: balanceBefore.toFixed(2),
-    balanceAfterGhs: balanceAfter.toFixed(2),
-    status: "completed",
-    description: `Investment in ${project.title}`,
-  });
-
-  await db
-    .insert(portfolios)
-    .values({ userId, totalInvestedGhs: amountGhs })
-    .onConflictDoUpdate({
-      target: portfolios.userId,
-      set: {
-        totalInvestedGhs: sql`${portfolios.totalInvestedGhs} + ${amountGhs}`,
-        updatedAt: new Date(),
-      },
-    });
 
   await creditReferralRewards(userId, investment.id, amountGhs).catch((err) =>
     console.error("Failed to credit referral rewards:", err),
