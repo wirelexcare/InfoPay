@@ -534,6 +534,7 @@ export const chatMessages = pgTable(
     readByAdmin: boolean("read_by_admin").notNull().default(false),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     editedAt: timestamp("edited_at"),
+    editedByAdminName: text("edited_by_admin_name"),
   },
   (t) => ({
     userCreatedIdx: index("chat_messages_user_created_idx").on(
@@ -542,6 +543,21 @@ export const chatMessages = pgTable(
     ),
   }),
 );
+
+// One row per investor thread. Presence of a row means an admin has claimed
+// the thread; deleted on release or replaced on takeover. No expiry — locks
+// only clear via explicit release or another admin taking over, so a thread
+// is never in limbo waiting on a timer.
+export const chatThreadLocks = pgTable("chat_thread_locks", {
+  threadUserId: uuid("thread_user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  adminId: uuid("admin_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  adminName: text("admin_name").notNull(),
+  lockedAt: timestamp("locked_at").notNull().defaultNow(),
+});
 
 export const supportSettings = pgTable("support_settings", {
   id: uuid("id").primaryKey().defaultRandom(),

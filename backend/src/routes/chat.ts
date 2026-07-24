@@ -2,10 +2,12 @@ import { Router } from "express";
 import multer from "multer";
 import { z } from "zod";
 import { asc, desc, eq, and, count } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "../db/index.js";
-import { chatMessages, manualDeposits } from "../db/schema.js";
+import { chatMessages, manualDeposits, users, chatThreadLocks } from "../db/schema.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
 import { uploadPaymentScreenshot } from "../lib/storage.js";
+import { publishChatEvent } from "../lib/realtime.js";
 
 export const chatRouter = Router();
 
@@ -45,17 +47,38 @@ chatRouter.get("/messages", requireAuth, async (req: AuthedRequest, res) => {
   const userId = req.user!.userId;
 
   try {
-    const [messages, deposits] = await Promise.all([
+    const senderAlias = alias(users, "chat_sender");
+    const [messages, deposits, [lock]] = await Promise.all([
       db
-        .select()
+        .select({
+          id: chatMessages.id,
+          userId: chatMessages.userId,
+          senderId: chatMessages.senderId,
+          senderRole: chatMessages.senderRole,
+          body: chatMessages.body,
+          imageUrl: chatMessages.imageUrl,
+          manualDepositId: chatMessages.manualDepositId,
+          readByUser: chatMessages.readByUser,
+          readByAdmin: chatMessages.readByAdmin,
+          createdAt: chatMessages.createdAt,
+          editedAt: chatMessages.editedAt,
+          editedByAdminName: chatMessages.editedByAdminName,
+          senderName: senderAlias.fullName,
+        })
         .from(chatMessages)
+        .leftJoin(senderAlias, eq(chatMessages.senderId, senderAlias.id))
         .where(eq(chatMessages.userId, userId))
         .orderBy(asc(chatMessages.createdAt))
         .limit(200),
       getUserChatDeposits(userId),
+      db
+        .select()
+        .from(chatThreadLocks)
+        .where(eq(chatThreadLocks.threadUserId, userId))
+        .limit(1),
     ]);
 
-    res.json({ messages, deposits });
+    res.json({ messages, deposits, lock: lock ?? null });
   } catch (error) {
     console.error("Error fetching chat messages:", error);
     res.status(500).json({ error: "Failed to load messages" });
@@ -89,6 +112,11 @@ chatRouter.post("/messages", requireAuth, async (req: AuthedRequest, res) => {
         readByUser: true,
       })
       .returning();
+
+    publishChatEvent(req.user!.userId, { type: "messages-changed" }).catch((err) =>
+      console.error("Realtime publish failed:", err),
+    );
+
     res.status(201).json({ message });
   } catch (error) {
     console.error("Error sending chat message:", error);

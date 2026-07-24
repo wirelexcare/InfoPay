@@ -29,6 +29,7 @@ import {
   supportSettings,
   paymentSettings,
   chatMessages,
+  chatThreadLocks,
 } from "../db/schema.js";
 import {
   requireAuth,
@@ -42,6 +43,7 @@ import { runDailyRoiAccrual } from "../lib/roiAccrual.js";
 import { uploadProjectImage, uploadPaymentScreenshot } from "../lib/storage.js";
 import { generateRewardPoolCode } from "../lib/rewardPoolCode.js";
 import { getPaymentRules } from "../lib/paymentSettings.js";
+import { publishChatEvent } from "../lib/realtime.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -2456,6 +2458,15 @@ async function getChatDepositsForUser(userId: string) {
     .limit(50);
 }
 
+async function getAdminName(adminId: string): Promise<string> {
+  const [admin] = await db
+    .select({ fullName: users.fullName })
+    .from(users)
+    .where(eq(users.id, adminId))
+    .limit(1);
+  return admin?.fullName ?? "Admin";
+}
+
 adminRouter.get(
   "/chats",
   requirePermission("chats.manage"),
@@ -2477,7 +2488,7 @@ adminRouter.get(
       }
 
       const userIds = convos.map((c) => c.userId);
-      const [convoUsers, recentMessages] = await Promise.all([
+      const [convoUsers, recentMessages, locks] = await Promise.all([
         db
           .select({
             id: users.id,
@@ -2492,9 +2503,14 @@ adminRouter.get(
           .where(inArray(chatMessages.userId, userIds))
           .orderBy(desc(chatMessages.createdAt))
           .limit(300),
+        db
+          .select()
+          .from(chatThreadLocks)
+          .where(inArray(chatThreadLocks.threadUserId, userIds)),
       ]);
 
       const userMap = new Map(convoUsers.map((u) => [u.id, u]));
+      const lockMap = new Map(locks.map((l) => [l.threadUserId, l]));
       // First message per user in the desc-ordered list = latest message
       const latestByUser = new Map<string, (typeof recentMessages)[number]>();
       for (const msg of recentMessages) {
@@ -2504,6 +2520,7 @@ adminRouter.get(
       const data = convos.map((c) => {
         const u = userMap.get(c.userId);
         const last = latestByUser.get(c.userId);
+        const lock = lockMap.get(c.userId);
         let preview = last?.body ?? "";
         if (!preview && last?.imageUrl) preview = "Image";
         if (!preview && last?.manualDepositId) preview = "Top-up request";
@@ -2514,6 +2531,7 @@ adminRouter.get(
           lastMessageAt: c.lastMessageAt,
           lastMessagePreview: preview,
           unreadCount: Number(c.unreadCount),
+          lockedByAdminName: lock?.adminName ?? null,
         };
       });
 
@@ -2557,11 +2575,27 @@ adminRouter.get(
   async (req: AuthedRequest, res) => {
     try {
       const { userId } = req.params;
+      const senderAlias = alias(users, "chat_sender");
 
-      const [messages, deposits, [user]] = await Promise.all([
+      const [messages, deposits, [user], [lock]] = await Promise.all([
         db
-          .select()
+          .select({
+            id: chatMessages.id,
+            userId: chatMessages.userId,
+            senderId: chatMessages.senderId,
+            senderRole: chatMessages.senderRole,
+            body: chatMessages.body,
+            imageUrl: chatMessages.imageUrl,
+            manualDepositId: chatMessages.manualDepositId,
+            readByUser: chatMessages.readByUser,
+            readByAdmin: chatMessages.readByAdmin,
+            createdAt: chatMessages.createdAt,
+            editedAt: chatMessages.editedAt,
+            editedByAdminName: chatMessages.editedByAdminName,
+            senderName: senderAlias.fullName,
+          })
           .from(chatMessages)
+          .leftJoin(senderAlias, eq(chatMessages.senderId, senderAlias.id))
           .where(eq(chatMessages.userId, userId))
           .orderBy(asc(chatMessages.createdAt))
           .limit(200),
@@ -2575,13 +2609,18 @@ adminRouter.get(
           .from(users)
           .where(eq(users.id, userId))
           .limit(1),
+        db
+          .select()
+          .from(chatThreadLocks)
+          .where(eq(chatThreadLocks.threadUserId, userId))
+          .limit(1),
       ]);
 
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
 
-      res.json({ messages, deposits, user });
+      res.json({ messages, deposits, user, lock: lock ?? null });
     } catch (error) {
       console.error("Error fetching chat messages:", error);
       res.status(500).json({ error: "Failed to fetch messages" });
@@ -2618,6 +2657,8 @@ adminRouter.post(
         return res.status(404).json({ error: "User not found" });
       }
 
+      const adminName = await getAdminName(req.user!.userId);
+
       const [message] = await db
         .insert(chatMessages)
         .values({
@@ -2638,7 +2679,11 @@ adminRouter.post(
         { targetUserId: userId },
       );
 
-      res.status(201).json({ message });
+      publishChatEvent(userId, { type: "messages-changed" }).catch((err) =>
+        console.error("Realtime publish failed:", err),
+      );
+
+      res.status(201).json({ message: { ...message, senderName: adminName } });
     } catch (error) {
       console.error("Error sending chat message:", error);
       res.status(500).json({ error: "Failed to send message" });
@@ -2673,9 +2718,15 @@ adminRouter.patch(
         return res.status(400).json({ error: "Cannot edit a top-up request card" });
       }
 
+      const adminName = await getAdminName(req.user!.userId);
+
       const [message] = await db
         .update(chatMessages)
-        .set({ body: parsed.data.body, editedAt: new Date() })
+        .set({
+          body: parsed.data.body,
+          editedAt: new Date(),
+          editedByAdminName: adminName,
+        })
         .where(eq(chatMessages.id, messageId))
         .returning();
 
@@ -2685,6 +2736,10 @@ adminRouter.patch(
         "chat_messages",
         messageId,
         { targetUserId: userId, previousBody: existing.body, newBody: parsed.data.body },
+      );
+
+      publishChatEvent(userId, { type: "messages-changed" }).catch((err) =>
+        console.error("Realtime publish failed:", err),
       );
 
       res.json({ message });
@@ -2725,6 +2780,10 @@ adminRouter.delete(
         { targetUserId: userId, body: existing.body, imageUrl: existing.imageUrl },
       );
 
+      publishChatEvent(userId, { type: "messages-changed" }).catch((err) =>
+        console.error("Realtime publish failed:", err),
+      );
+
       res.json({ success: true, messageId });
     } catch (error) {
       console.error("Error deleting chat message:", error);
@@ -2751,6 +2810,157 @@ adminRouter.post(
     } catch (error) {
       console.error("Error marking chat read:", error);
       res.status(500).json({ error: "Failed to mark as read" });
+    }
+  },
+);
+
+// ============ THREAD LOCKS (pessimistic locking for multi-admin chat) ============
+
+// Claim a thread. No-ops (returns the existing lock) if the caller already
+// holds it; fails if someone else does — use /takeover to override that.
+adminRouter.post(
+  "/chats/:userId/lock",
+  requirePermission("chats.manage"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const { userId } = req.params;
+      const adminId = req.user!.userId;
+
+      const [existing] = await db
+        .select()
+        .from(chatThreadLocks)
+        .where(eq(chatThreadLocks.threadUserId, userId))
+        .limit(1);
+
+      if (existing && existing.adminId !== adminId) {
+        return res.status(409).json({ error: "Chat already claimed by another admin", lock: existing });
+      }
+      if (existing) {
+        return res.json({ lock: existing });
+      }
+
+      const adminName = await getAdminName(adminId);
+      const [lock] = await db
+        .insert(chatThreadLocks)
+        .values({ threadUserId: userId, adminId, adminName })
+        .returning();
+
+      publishChatEvent(userId, { type: "lock-changed" }).catch((err) =>
+        console.error("Realtime publish failed:", err),
+      );
+
+      res.json({ lock });
+    } catch (error) {
+      console.error("Error claiming chat lock:", error);
+      res.status(500).json({ error: "Failed to claim chat" });
+    }
+  },
+);
+
+// Release a lock the caller holds.
+adminRouter.delete(
+  "/chats/:userId/lock",
+  requirePermission("chats.manage"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const { userId } = req.params;
+      const adminId = req.user!.userId;
+
+      const [existing] = await db
+        .select()
+        .from(chatThreadLocks)
+        .where(eq(chatThreadLocks.threadUserId, userId))
+        .limit(1);
+      if (!existing || existing.adminId !== adminId) {
+        return res.status(404).json({ error: "You do not hold this lock" });
+      }
+
+      await db.delete(chatThreadLocks).where(eq(chatThreadLocks.threadUserId, userId));
+
+      publishChatEvent(userId, { type: "lock-changed" }).catch((err) =>
+        console.error("Realtime publish failed:", err),
+      );
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error releasing chat lock:", error);
+      res.status(500).json({ error: "Failed to release chat" });
+    }
+  },
+);
+
+// Forcibly transfer a lock held by another admin (e.g. they stepped away).
+// Logged for accountability since it overrides another admin's claim.
+adminRouter.post(
+  "/chats/:userId/lock/takeover",
+  requirePermission("chats.manage"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const { userId } = req.params;
+      const adminId = req.user!.userId;
+
+      const [existing] = await db
+        .select()
+        .from(chatThreadLocks)
+        .where(eq(chatThreadLocks.threadUserId, userId))
+        .limit(1);
+
+      const adminName = await getAdminName(adminId);
+      const [lock] = await db
+        .insert(chatThreadLocks)
+        .values({ threadUserId: userId, adminId, adminName })
+        .onConflictDoUpdate({
+          target: chatThreadLocks.threadUserId,
+          set: { adminId, adminName, lockedAt: new Date() },
+        })
+        .returning();
+
+      await logAdminAction(
+        adminId,
+        "CHAT_LOCK_TAKEOVER",
+        "chat_thread_locks",
+        userId,
+        { targetUserId: userId, previousAdminId: existing?.adminId ?? null, previousAdminName: existing?.adminName ?? null },
+      );
+
+      publishChatEvent(userId, { type: "lock-changed" }).catch((err) =>
+        console.error("Realtime publish failed:", err),
+      );
+
+      res.json({ lock });
+    } catch (error) {
+      console.error("Error taking over chat lock:", error);
+      res.status(500).json({ error: "Failed to take over chat" });
+    }
+  },
+);
+
+const typingSchema = z.object({ isTyping: z.boolean() });
+
+// Ephemeral — no DB write, just relays a ready-made broadcast signal to
+// whoever is currently subscribed to this thread's realtime channel.
+adminRouter.post(
+  "/chats/:userId/typing",
+  requirePermission("chats.manage"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const { userId } = req.params;
+      const parsed = typingSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+      }
+
+      const adminName = await getAdminName(req.user!.userId);
+      await publishChatEvent(userId, {
+        type: "typing",
+        adminName,
+        isTyping: parsed.data.isTyping,
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error broadcasting typing state:", error);
+      res.status(500).json({ error: "Failed to broadcast typing state" });
     }
   },
 );

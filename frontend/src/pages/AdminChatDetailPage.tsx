@@ -6,9 +6,11 @@ import {
   Check,
   ExternalLink,
   Loader2,
+  Lock,
   Paperclip,
   Pencil,
   Send,
+  ShieldAlert,
   Trash2,
   Wallet,
   X,
@@ -16,6 +18,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
+import { useAuthStore } from "../lib/store";
+import { subscribeToChatThread } from "../lib/realtime";
 import {
   formatChatTime,
   ImageLightbox,
@@ -29,6 +33,13 @@ interface ChatUser {
   phone: string;
 }
 
+interface ThreadLock {
+  threadUserId: string;
+  adminId: string;
+  adminName: string;
+  lockedAt: string;
+}
+
 
 const DEPOSIT_STATUS_STYLES: Record<ChatDeposit["status"], string> = {
   pending: "bg-amber-100 text-amber-700",
@@ -39,6 +50,7 @@ const DEPOSIT_STATUS_STYLES: Record<ChatDeposit["status"], string> = {
 export function AdminChatDetailPage() {
   const navigate = useNavigate();
   const { userId } = useParams<{ userId: string }>();
+  const currentAdminId = useAuthStore((s) => s.user?.id);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [deposits, setDeposits] = useState<Record<string, ChatDeposit>>({});
@@ -49,6 +61,20 @@ export function AdminChatDetailPage() {
   const [attachedImageUrl, setAttachedImageUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
+  // Pessimistic lock on the thread + live typing state from other admins
+  const [lock, setLock] = useState<ThreadLock | null>(null);
+  const [claiming, setClaiming] = useState(false);
+  const [takingOver, setTakingOver] = useState(false);
+  const [otherTyping, setOtherTyping] = useState<string | null>(null);
+  const iHoldLock = lock ? lock.adminId === currentAdminId : false;
+  const lockedByOther = lock !== null && !iHoldLock;
+  const composerDisabled = lockedByOther || otherTyping !== null;
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isTypingRef = useRef(false);
+  // Snapshot of the last message id when the admin started composing, so we
+  // can warn them if the thread moved on underneath their draft.
+  const draftSnapshotIdRef = useRef<string | null>(null);
 
   // Deposit review state
   const [actingDepositId, setActingDepositId] = useState<string | null>(null);
@@ -94,10 +120,17 @@ export function AdminChatDetailPage() {
     try {
       const { data } = await api.get(`/api/admin/chats/${userId}/messages`);
       const newOnes = absorb(data.messages, data.deposits);
+      setLock(data.lock ?? null);
       if (newOnes.length > 0) scrollToBottom();
     } catch {
       // next poll will catch up
     }
+  }
+
+  function sendTyping(isTyping: boolean) {
+    if (isTypingRef.current === isTyping) return;
+    isTypingRef.current = isTyping;
+    api.post(`/api/admin/chats/${userId}/typing`, { isTyping }).catch(() => {});
   }
 
   useEffect(() => {
@@ -112,6 +145,7 @@ export function AdminChatDetailPage() {
         const { data } = await api.get(`/api/admin/chats/${userId}/messages`);
         if (cancelled) return;
         if (data.user) setChatUser(data.user);
+        setLock(data.lock ?? null);
         const newOnes = absorb(data.messages, data.deposits);
         if (newOnes.length > 0) {
           const newUserMessages = newOnes.some((m) => m.senderRole === "user");
@@ -130,18 +164,55 @@ export function AdminChatDetailPage() {
       }
     }
 
+    async function claim() {
+      setClaiming(true);
+      try {
+        const { data } = await api.post(`/api/admin/chats/${userId}/lock`);
+        if (!cancelled) setLock(data.lock);
+      } catch (err: any) {
+        if (!cancelled) setLock(err.response?.data?.lock ?? null);
+      } finally {
+        if (!cancelled) setClaiming(false);
+      }
+    }
+
     poll(true).then(() => {
       api.post(`/api/admin/chats/${userId}/read`).catch(() => {});
+      claim();
     });
-    const interval = setInterval(() => poll(), 5000);
+    const interval = setInterval(() => poll(), 15000);
     const onVisible = () => {
       if (document.visibilityState === "visible") poll();
     };
     document.addEventListener("visibilitychange", onVisible);
+
+    let typingIndicatorTimeout: ReturnType<typeof setTimeout> | null = null;
+    const unsubscribe = subscribeToChatThread(userId, (event) => {
+      if (event.type === "messages-changed" || event.type === "lock-changed") {
+        poll();
+      } else if (event.type === "typing") {
+        if (typingIndicatorTimeout) clearTimeout(typingIndicatorTimeout);
+        if (event.isTyping) {
+          setOtherTyping(event.adminName);
+          typingIndicatorTimeout = setTimeout(() => setOtherTyping(null), 8000);
+        } else {
+          setOtherTyping(null);
+        }
+      }
+    });
+
     return () => {
       cancelled = true;
       clearInterval(interval);
+      if (typingIndicatorTimeout) clearTimeout(typingIndicatorTimeout);
       document.removeEventListener("visibilitychange", onVisible);
+      unsubscribe();
+      if (isTypingRef.current) {
+        isTypingRef.current = false;
+        api.post(`/api/admin/chats/${userId}/typing`, { isTyping: false }).catch(() => {});
+      }
+      // Release only if we still hold it — avoids clobbering a takeover.
+      api.delete(`/api/admin/chats/${userId}/lock`).catch(() => {});
     };
   }, [userId]);
 
@@ -169,10 +240,81 @@ export function AdminChatDetailPage() {
     }
   }
 
+  function handleInputChange(value: string) {
+    setInput(value);
+    if (value.trim() && !draftSnapshotIdRef.current) {
+      draftSnapshotIdRef.current = messages[messages.length - 1]?.id ?? "";
+    }
+    if (value.trim()) {
+      sendTyping(true);
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => sendTyping(false), 3000);
+    } else {
+      sendTyping(false);
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    }
+  }
+
+  async function handleClaimLock() {
+    setClaiming(true);
+    try {
+      const { data } = await api.post(`/api/admin/chats/${userId}/lock`);
+      setLock(data.lock);
+    } catch (err: any) {
+      setLock(err.response?.data?.lock ?? null);
+      toast.error(err.response?.data?.error ?? "Failed to claim chat");
+    } finally {
+      setClaiming(false);
+    }
+  }
+
+  async function handleReleaseLock() {
+    try {
+      await api.delete(`/api/admin/chats/${userId}/lock`);
+      setLock(null);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error ?? "Failed to release chat");
+    }
+  }
+
+  async function handleTakeover() {
+    if (
+      !window.confirm(
+        `${lock?.adminName ?? "Another admin"} claimed this chat. Take over anyway?`,
+      )
+    ) {
+      return;
+    }
+    setTakingOver(true);
+    try {
+      const { data } = await api.post(`/api/admin/chats/${userId}/lock/takeover`);
+      setLock(data.lock);
+      toast.success("You've taken over this chat");
+    } catch (err: any) {
+      toast.error(err.response?.data?.error ?? "Failed to take over chat");
+    } finally {
+      setTakingOver(false);
+    }
+  }
+
   async function handleSend(e: FormEvent) {
     e.preventDefault();
     const body = input.trim();
     if (!body && !attachedImageUrl) return;
+
+    if (draftSnapshotIdRef.current !== null) {
+      const latestId = messages[messages.length - 1]?.id ?? "";
+      if (draftSnapshotIdRef.current !== latestId) {
+        const proceed = window.confirm(
+          "New messages arrived in this chat while you were typing. Review them before sending?\n\nOK sends anyway, Cancel lets you look first.",
+        );
+        if (!proceed) return;
+      }
+    }
+    draftSnapshotIdRef.current = null;
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    sendTyping(false);
+
     setSending(true);
     try {
       const { data } = await api.post(`/api/admin/chats/${userId}/messages`, {
@@ -397,6 +539,50 @@ export function AdminChatDetailPage() {
               Credit wallet
             </button>
           </div>
+
+          {/* Thread claim banner */}
+          <div className="flex items-center gap-2 border-t border-border px-4 py-2">
+            {lockedByOther ? (
+              <>
+                <Lock size={13} className="shrink-0 text-amber-600" />
+                <p className="flex-1 text-xs text-ink-500">
+                  <span className="font-semibold text-ink-700">{lock!.adminName}</span> is
+                  responding to this chat
+                </p>
+                <button
+                  type="button"
+                  onClick={handleTakeover}
+                  disabled={takingOver}
+                  className="flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-200 disabled:opacity-50"
+                >
+                  <ShieldAlert size={11} />
+                  {takingOver ? "Taking over..." : "Take over"}
+                </button>
+              </>
+            ) : iHoldLock ? (
+              <>
+                <Lock size={13} className="shrink-0 text-green-600" />
+                <p className="flex-1 text-xs text-ink-500">You've claimed this chat</p>
+                <button
+                  type="button"
+                  onClick={handleReleaseLock}
+                  className="rounded-full bg-ink-100 px-2.5 py-1 text-[11px] font-semibold text-ink-600 transition hover:bg-ink-200"
+                >
+                  Release
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={handleClaimLock}
+                disabled={claiming}
+                className="flex items-center gap-1 rounded-full bg-ink-100 px-2.5 py-1 text-[11px] font-semibold text-ink-600 transition hover:bg-ink-200 disabled:opacity-50"
+              >
+                <Lock size={11} />
+                {claiming ? "Claiming..." : "Claim chat"}
+              </button>
+            )}
+          </div>
         </header>
 
         {/* Messages */}
@@ -522,6 +708,11 @@ export function AdminChatDetailPage() {
                   className={`group flex items-end gap-1.5 ${mine ? "flex-row-reverse" : ""}`}
                 >
                   <div className="max-w-[80%]">
+                    {mine && m.senderName && (
+                      <p className="mb-0.5 text-right text-[10px] font-semibold text-ink-400">
+                        {m.senderName}
+                      </p>
+                    )}
                     {isEditing ? (
                       <div className="rounded-2xl border border-primary/40 bg-card p-2 shadow-soft">
                         <textarea
@@ -585,7 +776,8 @@ export function AdminChatDetailPage() {
                       className={`mt-1 text-[10px] text-ink-300 ${mine ? "text-right" : ""}`}
                     >
                       {formatChatTime(m.createdAt)}
-                      {m.editedAt && " · edited"}
+                      {m.editedAt &&
+                        ` · edited${m.editedByAdminName ? ` by ${m.editedByAdminName}` : ""}`}
                     </p>
                   </div>
                   {!isEditing && (
@@ -619,6 +811,11 @@ export function AdminChatDetailPage() {
 
         {/* Composer */}
         <div className="sticky bottom-0 z-20 border-t border-border bg-card/95 px-4 py-3 backdrop-blur-md">
+          {otherTyping && (
+            <p className="mb-2 text-xs font-medium text-amber-600">
+              {otherTyping} is typing...
+            </p>
+          )}
           {/* Quick reply templates */}
           <div className="no-scrollbar mb-2 flex gap-1.5 overflow-x-auto">
             {buildTemplates().map((t) => (
@@ -665,7 +862,7 @@ export function AdminChatDetailPage() {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
+              disabled={uploading || composerDisabled}
               className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-ink-400 transition hover:bg-ink-100 hover:text-ink-600 disabled:opacity-50"
               aria-label="Attach image"
             >
@@ -677,13 +874,24 @@ export function AdminChatDetailPage() {
             </button>
             <input
               value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Type a reply..."
-              className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-ink-900 outline-none placeholder:text-ink-300 focus:border-primary/40"
+              onChange={(e) => handleInputChange(e.target.value)}
+              onBlur={() => {
+                if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+                sendTyping(false);
+              }}
+              disabled={composerDisabled}
+              placeholder={
+                lockedByOther
+                  ? `${lock!.adminName} is handling this chat`
+                  : "Type a reply..."
+              }
+              className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-ink-900 outline-none placeholder:text-ink-300 focus:border-primary/40 disabled:cursor-not-allowed disabled:opacity-60"
             />
             <button
               type="submit"
-              disabled={sending || uploading || (!input.trim() && !attachedImageUrl)}
+              disabled={
+                sending || uploading || composerDisabled || (!input.trim() && !attachedImageUrl)
+              }
               className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground transition active:scale-95 disabled:opacity-50"
               aria-label="Send message"
             >

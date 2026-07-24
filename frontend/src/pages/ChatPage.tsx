@@ -3,17 +3,32 @@ import { Loader2, Paperclip, Send, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 import { Skeleton } from "../components/ui/skeleton";
+import { useAuthStore } from "../lib/store";
+import { subscribeToChatThread } from "../lib/realtime";
 
 export interface ChatMessage {
   id: string;
   userId: string;
   senderId: string | null;
   senderRole: "user" | "admin" | "system";
+  senderName: string | null;
   body: string | null;
   imageUrl: string | null;
   manualDepositId: string | null;
   createdAt: string;
   editedAt: string | null;
+  editedByAdminName: string | null;
+}
+
+// Animated "..." dots shown while an admin is composing a reply.
+function TypingDots() {
+  return (
+    <span className="inline-flex items-center gap-0.5">
+      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.3s]" />
+      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.15s]" />
+      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current" />
+    </span>
+  );
 }
 
 // Full-screen preview for chat image attachments, in place of opening the
@@ -120,6 +135,7 @@ export function TopUpCard({
 }
 
 export function ChatPage() {
+  const userId = useAuthStore((s) => s.user?.id);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [deposits, setDeposits] = useState<Record<string, ChatDeposit>>({});
   const [loading, setLoading] = useState(true);
@@ -128,6 +144,7 @@ export function ChatPage() {
   const [attachedImageUrl, setAttachedImageUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [typingAdminName, setTypingAdminName] = useState<string | null>(null);
 
   // Tracks which message ids we've already rendered, purely to detect newly
   // arrived messages (for scroll/mark-read) -- the message list itself is
@@ -182,17 +199,39 @@ export function ChatPage() {
     poll(true).then(() => {
       api.post("/api/chat/read").catch(() => {});
     });
-    const interval = setInterval(() => poll(), 5000);
+    // Realtime broadcasts are the primary signal; polling is just the
+    // fallback in case a signal is missed (tab backgrounded, brief drop).
+    const interval = setInterval(() => poll(), 15000);
     const onVisible = () => {
       if (document.visibilityState === "visible") poll();
     };
     document.addEventListener("visibilitychange", onVisible);
+
+    let typingTimeout: ReturnType<typeof setTimeout> | null = null;
+    const unsubscribe = userId
+      ? subscribeToChatThread(userId, (event) => {
+          if (event.type === "messages-changed") {
+            poll();
+          } else if (event.type === "typing") {
+            if (typingTimeout) clearTimeout(typingTimeout);
+            if (event.isTyping) {
+              setTypingAdminName(event.adminName);
+              typingTimeout = setTimeout(() => setTypingAdminName(null), 8000);
+            } else {
+              setTypingAdminName(null);
+            }
+          }
+        })
+      : () => {};
+
     return () => {
       cancelled = true;
       clearInterval(interval);
+      if (typingTimeout) clearTimeout(typingTimeout);
       document.removeEventListener("visibilitychange", onVisible);
+      unsubscribe();
     };
-  }, []);
+  }, [userId]);
 
   async function handleAttach(file: File) {
     if (!file.type.startsWith("image/")) {
@@ -296,6 +335,11 @@ export function ChatPage() {
             return (
               <div key={m.id} className={mine ? "flex justify-end" : "flex justify-start"}>
                 <div className="max-w-[80%]">
+                  {!mine && m.senderName && (
+                    <p className="mb-0.5 text-[10px] font-semibold text-ink-400">
+                      {m.senderName}
+                    </p>
+                  )}
                   <div
                     className={`rounded-2xl px-3.5 py-2.5 shadow-soft ${
                       mine
@@ -330,6 +374,14 @@ export function ChatPage() {
               </div>
             );
           })}
+          {typingAdminName && (
+            <div className="flex justify-start">
+              <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-md border border-border bg-card px-3.5 py-2.5 text-ink-400 shadow-soft">
+                <TypingDots />
+                <span className="text-xs">{typingAdminName} is typing</span>
+              </div>
+            </div>
+          )}
           <div ref={bottomRef} />
         </div>
       )}

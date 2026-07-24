@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, MessageSquare } from "lucide-react";
+import { ArrowLeft, Lock, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
 
@@ -11,6 +11,7 @@ interface Conversation {
   lastMessageAt: string;
   lastMessagePreview: string;
   unreadCount: number;
+  lockedByAdminName: string | null;
 }
 
 function relativeTime(iso: string) {
@@ -97,8 +98,17 @@ export function AdminChatsPage() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-sm font-semibold text-ink-900">
-                      {c.userFullName}
+                    <p className="flex min-w-0 items-center gap-1 truncate text-sm font-semibold text-ink-900">
+                      <span className="truncate">{c.userFullName}</span>
+                      {c.lockedByAdminName && (
+                        <span
+                          className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700"
+                          title={`Claimed by ${c.lockedByAdminName}`}
+                        >
+                          <Lock size={9} />
+                          {c.lockedByAdminName}
+                        </span>
+                      )}
                     </p>
                     <p className="shrink-0 text-xs text-ink-400">
                       {relativeTime(c.lastMessageAt)}
