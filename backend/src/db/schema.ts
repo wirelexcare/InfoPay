@@ -82,6 +82,11 @@ export const manualDepositStatusEnum = pgEnum("manual_deposit_status", [
   "rejected",
 ]);
 
+export const manualDepositMethodEnum = pgEnum("manual_deposit_method", [
+  "momo",
+  "binance_pay",
+]);
+
 export const rewardTypeEnum = pgEnum("reward_type", [
   "fixed",
   "random_range",
@@ -399,9 +404,25 @@ export const depositMethodSettings = pgTable("deposit_method_settings", {
   momoEnabled: boolean("momo_enabled").notNull().default(true),
   cryptoEnabled: boolean("crypto_enabled").notNull().default(true),
   chatEnabled: boolean("chat_enabled").notNull().default(true),
+  binancePayEnabled: boolean("binance_pay_enabled").notNull().default(true),
   updatedBy: uuid("updated_by").references(() => users.id, {
     onDelete: "set null",
   }),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Each admin registers at most one personal Binance Pay ID (enforced by the
+// unique adminId below); investors pick one from the active list to pay into.
+export const binancePayAccounts = pgTable("binance_pay_accounts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  adminId: uuid("admin_id")
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
+  binanceId: varchar("binance_id", { length: 64 }).notNull(),
+  label: varchar("label", { length: 100 }).notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
@@ -410,11 +431,22 @@ export const manualDeposits = pgTable("manual_deposits", {
   userId: uuid("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  method: manualDepositMethodEnum("method").notNull().default("momo"),
   reference: varchar("reference", { length: 20 }).notNull().unique(),
   amountGhs: numeric("amount_ghs", { precision: 14, scale: 2 }).notNull(),
-  network: varchar("network", { length: 30 }).notNull(),
+  // Momo-specific; null for binance_pay deposits.
+  network: varchar("network", { length: 30 }),
+  senderNumber: varchar("sender_number", { length: 30 }),
+  // Shared "who sent this" label: momo sender name, or the investor's
+  // Binance nickname.
   senderName: varchar("sender_name", { length: 255 }).notNull(),
-  senderNumber: varchar("sender_number", { length: 30 }).notNull(),
+  // Binance Pay-specific; null for momo deposits.
+  binanceAccountId: uuid("binance_account_id").references(
+    () => binancePayAccounts.id,
+    { onDelete: "set null" },
+  ),
+  senderBinanceId: varchar("sender_binance_id", { length: 64 }),
+  senderEmail: varchar("sender_email", { length: 255 }),
   screenshotUrl: text("screenshot_url").notNull(),
   status: manualDepositStatusEnum("status").notNull().default("pending"),
   rejectionReason: text("rejection_reason"),
@@ -582,6 +614,12 @@ export const paymentSettings = pgTable("payment_settings", {
   // of the live NOWPayments minimum (which fluctuates with the crypto market).
   cryptoMinDepositGhs: numeric("crypto_min_deposit_ghs", { precision: 14, scale: 2 }),
   cryptoMaxDepositGhs: numeric("crypto_max_deposit_ghs", { precision: 14, scale: 2 }),
+  // Binance Pay deposit limits/fee.
+  binanceMinDepositGhs: numeric("binance_min_deposit_ghs", { precision: 14, scale: 2 }),
+  binanceMaxDepositGhs: numeric("binance_max_deposit_ghs", { precision: 14, scale: 2 }),
+  binanceDepositFeePct: numeric("binance_deposit_fee_pct", { precision: 5, scale: 2 })
+    .notNull()
+    .default("0"),
   minWithdrawalGhs: numeric("min_withdrawal_ghs", { precision: 14, scale: 2 }),
   maxWithdrawalGhs: numeric("max_withdrawal_ghs", { precision: 14, scale: 2 }),
   withdrawalFeePct: numeric("withdrawal_fee_pct", { precision: 5, scale: 2 })

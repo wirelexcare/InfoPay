@@ -9,6 +9,9 @@ export interface PaymentRules {
   // of the live NOWPayments minimum, which fluctuates with the crypto market.
   cryptoMinDepositGhs: number | null;
   cryptoMaxDepositGhs: number | null;
+  binanceMinDepositGhs: number | null;
+  binanceMaxDepositGhs: number | null;
+  binanceDepositFeePct: number;
   minWithdrawalGhs: number | null;
   maxWithdrawalGhs: number | null;
   withdrawalFeePct: number;
@@ -28,6 +31,9 @@ export async function getPaymentRules(): Promise<PaymentRules> {
     momoDepositFeePct: Number(row?.momoDepositFeePct ?? 0),
     cryptoMinDepositGhs: num(row?.cryptoMinDepositGhs),
     cryptoMaxDepositGhs: num(row?.cryptoMaxDepositGhs),
+    binanceMinDepositGhs: num(row?.binanceMinDepositGhs),
+    binanceMaxDepositGhs: num(row?.binanceMaxDepositGhs),
+    binanceDepositFeePct: Number(row?.binanceDepositFeePct ?? 0),
     minWithdrawalGhs: num(row?.minWithdrawalGhs),
     maxWithdrawalGhs: num(row?.maxWithdrawalGhs),
     withdrawalFeePct: Number(row?.withdrawalFeePct ?? 0),

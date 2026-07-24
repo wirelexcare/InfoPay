@@ -44,6 +44,9 @@ export function AdminPaymentSettingsPage() {
   const [depositFee, setDepositFee] = useState("0");
   const [cryptoMinDeposit, setCryptoMinDeposit] = useState("");
   const [cryptoMaxDeposit, setCryptoMaxDeposit] = useState("");
+  const [binanceMinDeposit, setBinanceMinDeposit] = useState("");
+  const [binanceMaxDeposit, setBinanceMaxDeposit] = useState("");
+  const [binanceDepositFee, setBinanceDepositFee] = useState("0");
   const [minWithdrawal, setMinWithdrawal] = useState("");
   const [maxWithdrawal, setMaxWithdrawal] = useState("");
   const [withdrawalFee, setWithdrawalFee] = useState("0");
@@ -61,6 +64,9 @@ export function AdminPaymentSettingsPage() {
         setDepositFee(String(Number(d.momoDepositFeePct ?? 0)));
         setCryptoMinDeposit(d.cryptoMinDepositGhs ?? "");
         setCryptoMaxDeposit(d.cryptoMaxDepositGhs ?? "");
+        setBinanceMinDeposit(d.binanceMinDepositGhs ?? "");
+        setBinanceMaxDeposit(d.binanceMaxDepositGhs ?? "");
+        setBinanceDepositFee(String(Number(d.binanceDepositFeePct ?? 0)));
         setMinWithdrawal(d.minWithdrawalGhs ?? "");
         setMaxWithdrawal(d.maxWithdrawalGhs ?? "");
         setWithdrawalFee(String(Number(d.withdrawalFeePct ?? 0)));
@@ -85,6 +91,9 @@ export function AdminPaymentSettingsPage() {
         momoDepositFeePct: depositFee || "0",
         cryptoMinDepositGhs: cryptoMinDeposit,
         cryptoMaxDepositGhs: cryptoMaxDeposit,
+        binanceMinDepositGhs: binanceMinDeposit,
+        binanceMaxDepositGhs: binanceMaxDeposit,
+        binanceDepositFeePct: binanceDepositFee || "0",
         minWithdrawalGhs: minWithdrawal,
         maxWithdrawalGhs: maxWithdrawal,
         withdrawalFeePct: withdrawalFee || "0",
@@ -161,6 +170,30 @@ export function AdminPaymentSettingsPage() {
                 Crypto deposits never carry a fee. NOWPayments also enforces its own live minimum,
                 which moves with the crypto market — these fields only add an optional extra floor/cap
                 on top of that.
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-border bg-card p-4 sm:p-6">
+              <h2 className="mb-3 font-bold text-ink-900">Binance Pay Deposits</h2>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <AmountField label="Minimum (GHS)" value={binanceMinDeposit} onChange={setBinanceMinDeposit} placeholder="No minimum" />
+                <AmountField label="Maximum (GHS)" value={binanceMaxDeposit} onChange={setBinanceMaxDeposit} placeholder="No maximum" />
+                <div>
+                  <label className="text-xs font-semibold uppercase text-ink-500">Fee (%)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={binanceDepositFee}
+                    onChange={(e) => setBinanceDepositFee(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
+                  />
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-ink-400">
+                The fee is added on top of the deposit, same as Mobile Money. Manage each
+                admin's Binance Pay ID from the Mobile Money Deposits page.
               </p>
             </div>
 

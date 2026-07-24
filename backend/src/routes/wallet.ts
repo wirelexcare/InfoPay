@@ -16,6 +16,7 @@ import {
   rewardPoolAudit,
   auditLogs,
   chatMessages,
+  binancePayAccounts,
 } from "../db/schema.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
 import {
@@ -347,10 +348,30 @@ walletRouter.get("/deposit-methods", requireAuth, async (_req, res) => {
       momo: row?.momoEnabled ?? true,
       crypto: row?.cryptoEnabled ?? true,
       chat: row?.chatEnabled ?? true,
+      binancePay: row?.binancePayEnabled ?? true,
     });
   } catch (error) {
     console.error("Error fetching deposit methods:", error);
     res.status(500).json({ error: "Failed to load deposit methods" });
+  }
+});
+
+// Active admin-registered Binance Pay IDs for the investor to choose from.
+walletRouter.get("/binance-pay-accounts", requireAuth, async (_req, res) => {
+  try {
+    const accounts = await db
+      .select({
+        id: binancePayAccounts.id,
+        binanceId: binancePayAccounts.binanceId,
+        label: binancePayAccounts.label,
+      })
+      .from(binancePayAccounts)
+      .where(eq(binancePayAccounts.isActive, true))
+      .orderBy(desc(binancePayAccounts.createdAt));
+    res.json({ accounts });
+  } catch (error) {
+    console.error("Error fetching Binance Pay accounts:", error);
+    res.status(500).json({ error: "Failed to load Binance Pay accounts" });
   }
 });
 
@@ -409,7 +430,8 @@ walletRouter.post(
   },
 );
 
-const manualDepositSchema = z.object({
+const momoManualDepositSchema = z.object({
+  method: z.literal("momo").optional().default("momo"),
   reference: z.string().min(3).max(20),
   amountGhs: z.coerce.number().positive(),
   network: z.enum(["mtn", "vodafone", "telecel", "airteltigo"]),
@@ -418,49 +440,101 @@ const manualDepositSchema = z.object({
   screenshotUrl: z.string().url(),
 });
 
+const binanceManualDepositSchema = z.object({
+  method: z.literal("binance_pay"),
+  reference: z.string().min(3).max(20),
+  amountGhs: z.coerce.number().positive(),
+  binanceAccountId: z.string().uuid(),
+  senderBinanceId: z.string().trim().min(3).max(64),
+  senderEmail: z.string().trim().email().max(255),
+  senderName: z.string().min(2).max(255),
+  screenshotUrl: z.string().url(),
+});
+
 walletRouter.post(
   "/manual-deposits",
   requireAuth,
   async (req: AuthedRequest, res) => {
-    const parsed = manualDepositSchema.safeParse(req.body);
+    const isBinance = req.body?.method === "binance_pay";
+    const parsed = isBinance
+      ? binanceManualDepositSchema.safeParse(req.body)
+      : momoManualDepositSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
     }
-    const { reference, amountGhs, network, senderName, senderNumber, screenshotUrl } =
-      parsed.data;
+    const { reference, amountGhs, senderName, screenshotUrl } = parsed.data;
 
     const [methodRow] = await db.select().from(depositMethodSettings).limit(1);
-    if (methodRow && !methodRow.momoEnabled) {
+    if (isBinance) {
+      if (methodRow && !methodRow.binancePayEnabled) {
+        return res.status(400).json({
+          error: "Binance Pay deposits are currently unavailable.",
+        });
+      }
+    } else if (methodRow && !methodRow.momoEnabled) {
       return res.status(400).json({
         error: "Mobile money deposits are currently unavailable.",
       });
     }
 
     const rules = await getPaymentRules();
-    if (rules.momoMinDepositGhs !== null && amountGhs < rules.momoMinDepositGhs) {
+    const minDeposit = isBinance ? rules.binanceMinDepositGhs : rules.momoMinDepositGhs;
+    const maxDeposit = isBinance ? rules.binanceMaxDepositGhs : rules.momoMaxDepositGhs;
+    if (minDeposit !== null && amountGhs < minDeposit) {
       return res.status(400).json({
-        error: `Minimum deposit is GHS ${rules.momoMinDepositGhs.toFixed(2)}`,
+        error: `Minimum deposit is GHS ${minDeposit.toFixed(2)}`,
       });
     }
-    if (rules.momoMaxDepositGhs !== null && amountGhs > rules.momoMaxDepositGhs) {
+    if (maxDeposit !== null && amountGhs > maxDeposit) {
       return res.status(400).json({
-        error: `Maximum deposit is GHS ${rules.momoMaxDepositGhs.toFixed(2)}`,
+        error: `Maximum deposit is GHS ${maxDeposit.toFixed(2)}`,
       });
     }
 
+    if (isBinance) {
+      const binanceData = parsed.data as z.infer<typeof binanceManualDepositSchema>;
+      const [account] = await db
+        .select()
+        .from(binancePayAccounts)
+        .where(
+          and(
+            eq(binancePayAccounts.id, binanceData.binanceAccountId),
+            eq(binancePayAccounts.isActive, true),
+          ),
+        )
+        .limit(1);
+      if (!account) {
+        return res.status(400).json({ error: "That Binance Pay account is no longer available." });
+      }
+    }
+
     try {
-      const [deposit] = await db
-        .insert(manualDeposits)
-        .values({
-          userId: req.user!.userId,
-          reference,
-          amountGhs: amountGhs.toFixed(2),
-          network,
-          senderName,
-          senderNumber,
-          screenshotUrl,
-        })
-        .returning();
+      const values = isBinance
+        ? {
+            userId: req.user!.userId,
+            method: "binance_pay" as const,
+            reference,
+            amountGhs: amountGhs.toFixed(2),
+            senderName,
+            binanceAccountId: (parsed.data as z.infer<typeof binanceManualDepositSchema>)
+              .binanceAccountId,
+            senderBinanceId: (parsed.data as z.infer<typeof binanceManualDepositSchema>)
+              .senderBinanceId,
+            senderEmail: (parsed.data as z.infer<typeof binanceManualDepositSchema>).senderEmail,
+            screenshotUrl,
+          }
+        : {
+            userId: req.user!.userId,
+            method: "momo" as const,
+            reference,
+            amountGhs: amountGhs.toFixed(2),
+            network: (parsed.data as z.infer<typeof momoManualDepositSchema>).network,
+            senderName,
+            senderNumber: (parsed.data as z.infer<typeof momoManualDepositSchema>).senderNumber,
+            screenshotUrl,
+          };
+
+      const [deposit] = await db.insert(manualDeposits).values(values).returning();
 
       // Post the top-up request into the user's live chat thread so admins
       // see it in the conversation and the user can track its status there.

@@ -7,17 +7,21 @@ import { AdminUserDetailModal } from "../components/AdminUserDetailModal";
 
 interface DepositDetail {
   id: string;
+  method: "momo" | "binance_pay";
   reference: string;
   amountGhs: string;
-  network: string;
+  network: string | null;
   senderName: string;
-  senderNumber: string;
+  senderNumber: string | null;
+  senderBinanceId: string | null;
+  senderEmail: string | null;
   screenshotUrl: string;
   status: "pending" | "approved" | "rejected";
   rejectionReason: string | null;
   createdAt: string;
   depositFeePct: number;
   expectedPaymentGhs: number;
+  binanceAccount: { binanceId: string; label: string } | null;
   user: {
     id: string;
     phone: string;
@@ -125,7 +129,9 @@ export function AdminDepositDetailPage() {
 
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-ink-900">Mobile Money Deposit</h1>
+            <h1 className="text-2xl font-bold text-ink-900">
+              {deposit.method === "binance_pay" ? "Binance Pay Deposit" : "Mobile Money Deposit"}
+            </h1>
             <p className="text-sm text-ink-500 font-mono">{deposit.reference}</p>
           </div>
           {deposit.status === "pending" && (
@@ -197,9 +203,27 @@ export function AdminDepositDetailPage() {
             </div>
           )}
           <Row label="Reference" value={deposit.reference} />
-          <Row label="Network paid from" value={deposit.network.toUpperCase()} />
-          <Row label="Sender name" value={deposit.senderName} />
-          <Row label="Sender number" value={deposit.senderNumber} />
+          {deposit.method === "binance_pay" ? (
+            <>
+              <Row
+                label="Paid to"
+                value={
+                  deposit.binanceAccount
+                    ? `${deposit.binanceAccount.label} (${deposit.binanceAccount.binanceId})`
+                    : "—"
+                }
+              />
+              <Row label="Sender Binance ID" value={deposit.senderBinanceId} />
+              <Row label="Sender email" value={deposit.senderEmail} />
+              <Row label="Sender nickname" value={deposit.senderName} />
+            </>
+          ) : (
+            <>
+              <Row label="Network paid from" value={deposit.network?.toUpperCase()} />
+              <Row label="Sender name" value={deposit.senderName} />
+              <Row label="Sender number" value={deposit.senderNumber} />
+            </>
+          )}
           <Row label="Submitted" value={new Date(deposit.createdAt).toLocaleString()} />
           {deposit.status === "rejected" && deposit.rejectionReason && (
             <Row label="Rejection reason" value={deposit.rejectionReason} />

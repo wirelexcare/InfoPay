@@ -30,6 +30,7 @@ import {
   paymentSettings,
   chatMessages,
   chatThreadLocks,
+  binancePayAccounts,
 } from "../db/schema.js";
 import {
   requireAuth,
@@ -1694,6 +1695,83 @@ adminRouter.post(
   },
 );
 
+// ============ BINANCE PAY ACCOUNTS (one per admin) ============
+
+adminRouter.get(
+  "/binance-pay-account",
+  requirePermission("deposits.manage"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const [account] = await db
+        .select()
+        .from(binancePayAccounts)
+        .where(eq(binancePayAccounts.adminId, req.user!.userId))
+        .limit(1);
+      res.json({ data: account ?? null });
+    } catch (error) {
+      console.error("Error fetching Binance Pay account:", error);
+      res.status(500).json({ error: "Failed to fetch Binance Pay account" });
+    }
+  },
+);
+
+const binancePayAccountSchema = z.object({
+  binanceId: z.string().trim().min(3).max(64),
+  label: z.string().trim().min(2).max(100),
+  isActive: z.boolean().optional().default(true),
+});
+
+adminRouter.put(
+  "/binance-pay-account",
+  requirePermission("deposits.manage"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const parsed = binancePayAccountSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+      }
+
+      const [account] = await db
+        .insert(binancePayAccounts)
+        .values({ adminId: req.user!.userId, ...parsed.data })
+        .onConflictDoUpdate({
+          target: binancePayAccounts.adminId,
+          set: { ...parsed.data, updatedAt: new Date() },
+        })
+        .returning();
+
+      await logAdminAction(
+        req.user!.userId,
+        "BINANCE_PAY_ACCOUNT_UPDATED",
+        "binance_pay_accounts",
+        account.id,
+        parsed.data,
+      );
+
+      res.json({ data: account });
+    } catch (error) {
+      console.error("Error saving Binance Pay account:", error);
+      res.status(500).json({ error: "Failed to save Binance Pay account" });
+    }
+  },
+);
+
+adminRouter.delete(
+  "/binance-pay-account",
+  requirePermission("deposits.manage"),
+  async (req: AuthedRequest, res) => {
+    try {
+      await db
+        .delete(binancePayAccounts)
+        .where(eq(binancePayAccounts.adminId, req.user!.userId));
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error removing Binance Pay account:", error);
+      res.status(500).json({ error: "Failed to remove Binance Pay account" });
+    }
+  },
+);
+
 // Which deposit methods users can see on the wallet Deposit tab.
 adminRouter.get("/deposit-methods", requirePermission("deposits.manage"), async (_req: AuthedRequest, res) => {
   try {
@@ -1703,6 +1781,7 @@ adminRouter.get("/deposit-methods", requirePermission("deposits.manage"), async 
         momoEnabled: row?.momoEnabled ?? true,
         cryptoEnabled: row?.cryptoEnabled ?? true,
         chatEnabled: row?.chatEnabled ?? true,
+        binancePayEnabled: row?.binancePayEnabled ?? true,
       },
     });
   } catch (error) {
@@ -1715,6 +1794,7 @@ const depositMethodsSchema = z.object({
   momoEnabled: z.boolean(),
   cryptoEnabled: z.boolean(),
   chatEnabled: z.boolean(),
+  binancePayEnabled: z.boolean(),
 });
 
 adminRouter.put(
@@ -1773,11 +1853,14 @@ adminRouter.get("/manual-deposits/pending", requirePermission("deposits.manage")
     const rows = await db
       .select({
         id: manualDeposits.id,
+        method: manualDeposits.method,
         reference: manualDeposits.reference,
         amountGhs: manualDeposits.amountGhs,
         network: manualDeposits.network,
         senderName: manualDeposits.senderName,
         senderNumber: manualDeposits.senderNumber,
+        senderBinanceId: manualDeposits.senderBinanceId,
+        senderEmail: manualDeposits.senderEmail,
         createdAt: manualDeposits.createdAt,
         userPhone: users.phone,
         userFullName: users.fullName,
@@ -1818,18 +1901,30 @@ adminRouter.get("/manual-deposits/:depositId", requirePermission("deposits.manag
       .from(users)
       .where(eq(users.id, deposit.userId));
 
+    let binanceAccount = null;
+    if (deposit.binanceAccountId) {
+      [binanceAccount] = await db
+        .select()
+        .from(binancePayAccounts)
+        .where(eq(binancePayAccounts.id, deposit.binanceAccountId))
+        .limit(1);
+    }
+
     // The user paid intended + fee (fee is charged on top), so show reviewers
     // the exact figure to expect on the payment screenshot.
-    const { momoDepositFeePct } = await getPaymentRules();
+    const rules = await getPaymentRules();
+    const depositFeePct =
+      deposit.method === "binance_pay" ? rules.binanceDepositFeePct : rules.momoDepositFeePct;
     const intended = Number(deposit.amountGhs);
     const expectedPaymentGhs =
-      Math.round(intended * (1 + momoDepositFeePct / 100) * 100) / 100;
+      Math.round(intended * (1 + depositFeePct / 100) * 100) / 100;
 
     res.json({
       data: {
         ...deposit,
         user,
-        depositFeePct: momoDepositFeePct,
+        binanceAccount,
+        depositFeePct,
         expectedPaymentGhs,
       },
     });
@@ -1878,6 +1973,11 @@ adminRouter.post(
         .set({ balanceGhs: balanceAfter.toFixed(2), updatedAt: new Date() })
         .where(eq(wallets.userId, deposit.userId));
 
+      const description =
+        deposit.method === "binance_pay"
+          ? "Manual Binance Pay deposit"
+          : `Manual mobile money deposit (${deposit.network})`;
+
       await db.insert(walletTransactions).values({
         userId: deposit.userId,
         type: "deposit",
@@ -1885,9 +1985,9 @@ adminRouter.post(
         balanceBeforeGhs: balanceBefore.toFixed(2),
         balanceAfterGhs: balanceAfter.toFixed(2),
         status: "completed",
-        method: "momo",
+        method: deposit.method,
         reference: deposit.reference,
-        description: `Manual mobile money deposit (${deposit.network})`,
+        description,
       });
 
       await db
@@ -3005,6 +3105,9 @@ const paymentSettingsInputSchema = z
     momoDepositFeePct: z.coerce.number().min(0).max(100).optional().default(0),
     cryptoMinDepositGhs: nullableAmount.optional().default(null),
     cryptoMaxDepositGhs: nullableAmount.optional().default(null),
+    binanceMinDepositGhs: nullableAmount.optional().default(null),
+    binanceMaxDepositGhs: nullableAmount.optional().default(null),
+    binanceDepositFeePct: z.coerce.number().min(0).max(100).optional().default(0),
     minWithdrawalGhs: nullableAmount.optional().default(null),
     maxWithdrawalGhs: nullableAmount.optional().default(null),
     withdrawalFeePct: z.coerce.number().min(0).max(100).optional().default(0),
@@ -3032,6 +3135,13 @@ const paymentSettingsInputSchema = z
   )
   .refine(
     (d) =>
+      d.binanceMinDepositGhs == null ||
+      d.binanceMaxDepositGhs == null ||
+      d.binanceMaxDepositGhs >= d.binanceMinDepositGhs,
+    { message: "Maximum Binance Pay deposit must be at least the minimum" },
+  )
+  .refine(
+    (d) =>
       d.minWithdrawalGhs == null ||
       d.maxWithdrawalGhs == null ||
       d.maxWithdrawalGhs >= d.minWithdrawalGhs,
@@ -3054,6 +3164,9 @@ adminRouter.get(
           momoDepositFeePct: "0",
           cryptoMinDepositGhs: null,
           cryptoMaxDepositGhs: null,
+          binanceMinDepositGhs: null,
+          binanceMaxDepositGhs: null,
+          binanceDepositFeePct: "0",
           minWithdrawalGhs: null,
           maxWithdrawalGhs: null,
           withdrawalFeePct: "0",
@@ -3085,6 +3198,9 @@ adminRouter.put(
         momoDepositFeePct: d.momoDepositFeePct.toFixed(2),
         cryptoMinDepositGhs: d.cryptoMinDepositGhs?.toFixed(2) ?? null,
         cryptoMaxDepositGhs: d.cryptoMaxDepositGhs?.toFixed(2) ?? null,
+        binanceMinDepositGhs: d.binanceMinDepositGhs?.toFixed(2) ?? null,
+        binanceMaxDepositGhs: d.binanceMaxDepositGhs?.toFixed(2) ?? null,
+        binanceDepositFeePct: d.binanceDepositFeePct.toFixed(2),
         minWithdrawalGhs: d.minWithdrawalGhs?.toFixed(2) ?? null,
         maxWithdrawalGhs: d.maxWithdrawalGhs?.toFixed(2) ?? null,
         withdrawalFeePct: d.withdrawalFeePct.toFixed(2),

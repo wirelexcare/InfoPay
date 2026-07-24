@@ -40,6 +40,12 @@ interface DepositSettings {
   accountNumber: string;
 }
 
+interface BinancePayAccount {
+  id: string;
+  binanceId: string;
+  label: string;
+}
+
 interface Wallet {
   balanceGhs: string;
 }
@@ -217,7 +223,7 @@ export function WalletPage() {
 
   const [depositAmount, setDepositAmount] = useState("");
   const [depositMethod, setDepositMethod] = useState<
-    "momo" | "bank" | "crypto" | "chat"
+    "momo" | "bank" | "crypto" | "chat" | "binancePay"
   >("chat");
   // Contact number sent along with a live-chat top-up request
   const [depositPhone, setDepositPhone] = useState(user?.phone ?? "");
@@ -228,7 +234,8 @@ export function WalletPage() {
     momo: boolean;
     crypto: boolean;
     chat: boolean;
-  }>({ momo: true, crypto: true, chat: true });
+    binancePay: boolean;
+  }>({ momo: true, crypto: true, chat: true, binancePay: true });
 
   useEffect(() => {
     api
@@ -238,6 +245,7 @@ export function WalletPage() {
           momo: data.momo ?? true,
           crypto: data.crypto ?? true,
           chat: data.chat ?? true,
+          binancePay: data.binancePay ?? true,
         });
       })
       .catch(() => {});
@@ -245,10 +253,15 @@ export function WalletPage() {
 
   // Keep the selected method valid when the admin has hidden it.
   useEffect(() => {
-    const order: ("momo" | "crypto" | "chat")[] = ["chat", "momo", "crypto"];
+    const order: ("momo" | "crypto" | "chat" | "binancePay")[] = [
+      "chat",
+      "momo",
+      "crypto",
+      "binancePay",
+    ];
     if (
       depositMethod !== "bank" &&
-      !enabledDepositMethods[depositMethod as "momo" | "crypto" | "chat"]
+      !enabledDepositMethods[depositMethod as "momo" | "crypto" | "chat" | "binancePay"]
     ) {
       const first = order.find((m) => enabledDepositMethods[m]);
       if (first) setDepositMethod(first);
@@ -267,6 +280,9 @@ export function WalletPage() {
     momoDepositFeePct: number;
     cryptoMinDepositGhs: number | null;
     cryptoMaxDepositGhs: number | null;
+    binanceMinDepositGhs: number | null;
+    binanceMaxDepositGhs: number | null;
+    binanceDepositFeePct: number;
     minWithdrawalGhs: number | null;
     maxWithdrawalGhs: number | null;
     withdrawalFeePct: number;
@@ -296,7 +312,7 @@ export function WalletPage() {
   // being submitted.
   function validateDepositAmount(
     amount: number,
-    method: "momo" | "bank" | "crypto" | "chat",
+    method: "momo" | "bank" | "crypto" | "chat" | "binancePay",
   ): string | null {
     if (!(amount > 0)) return "Enter a valid amount";
     if (!paymentRules) return null;
@@ -304,6 +320,18 @@ export function WalletPage() {
     if (method === "crypto") {
       const min = paymentRules.cryptoMinDepositGhs ?? cryptoQuote?.minDepositGhs ?? null;
       const max = paymentRules.cryptoMaxDepositGhs;
+      if (min !== null && amount < min) {
+        return `Minimum deposit is GHS ${min.toFixed(2)}`;
+      }
+      if (max !== null && amount > max) {
+        return `Maximum deposit is GHS ${max.toFixed(2)}`;
+      }
+      return null;
+    }
+
+    if (method === "binancePay") {
+      const min = paymentRules.binanceMinDepositGhs;
+      const max = paymentRules.binanceMaxDepositGhs;
       if (min !== null && amount < min) {
         return `Minimum deposit is GHS ${min.toFixed(2)}`;
       }
@@ -364,6 +392,20 @@ export function WalletPage() {
   });
   const [momoSubmitting, setMomoSubmitting] = useState(false);
 
+  const [binanceSheet, setBinanceSheet] = useState<{
+    accounts: BinancePayAccount[];
+    reference: string;
+    amountGhs: string;
+  } | null>(null);
+  const [binanceForm, setBinanceForm] = useState({
+    accountId: "",
+    senderBinanceId: "",
+    senderEmail: "",
+    senderName: "",
+    screenshotUrl: "" as string | null,
+  });
+  const [binanceSubmitting, setBinanceSubmitting] = useState(false);
+
   const methodsForType = methods.filter((m) => m.type === withdrawType);
 
   function loadWallet() {
@@ -422,6 +464,27 @@ export function WalletPage() {
         });
         setDepositAmount("");
         navigate("/chat");
+      } else if (depositMethod === "binancePay") {
+        const [accountsRes, referenceRes] = await Promise.all([
+          api.get("/api/wallet/binance-pay-accounts"),
+          api.get("/api/wallet/manual-deposits/reference"),
+        ]);
+        if (!accountsRes.data.accounts?.length) {
+          toast.error("No Binance Pay accounts are available right now. Please try another method.");
+          return;
+        }
+        setBinanceForm({
+          accountId: accountsRes.data.accounts[0].id,
+          senderBinanceId: "",
+          senderEmail: "",
+          senderName: "",
+          screenshotUrl: null,
+        });
+        setBinanceSheet({
+          accounts: accountsRes.data.accounts,
+          reference: referenceRes.data.reference,
+          amountGhs: depositAmount,
+        });
       } else {
         const [settingsRes, referenceRes] = await Promise.all([
           api.get("/api/wallet/deposit-settings"),
@@ -471,6 +534,36 @@ export function WalletPage() {
       toast.error(err.response?.data?.error ?? "Failed to submit deposit");
     } finally {
       setMomoSubmitting(false);
+    }
+  }
+
+  async function handleBinanceSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!binanceSheet) return;
+    if (!binanceForm.screenshotUrl) {
+      toast.error("Please upload your payment screenshot");
+      return;
+    }
+    setBinanceSubmitting(true);
+    try {
+      await api.post("/api/wallet/manual-deposits", {
+        method: "binance_pay",
+        reference: binanceSheet.reference,
+        amountGhs: binanceSheet.amountGhs,
+        binanceAccountId: binanceForm.accountId,
+        senderBinanceId: binanceForm.senderBinanceId,
+        senderEmail: binanceForm.senderEmail,
+        senderName: binanceForm.senderName,
+        screenshotUrl: binanceForm.screenshotUrl,
+      });
+      toast.success("Submitted, track it in live chat");
+      setBinanceSheet(null);
+      setDepositAmount("");
+      navigate("/chat");
+    } catch (err: any) {
+      toast.error(err.response?.data?.error ?? "Failed to submit deposit");
+    } finally {
+      setBinanceSubmitting(false);
     }
   }
 
@@ -593,6 +686,7 @@ export function WalletPage() {
                 )}
                 {paymentRules &&
                   depositMethod !== "crypto" &&
+                  depositMethod !== "binancePay" &&
                   limitsHint(
                     paymentRules.momoMinDepositGhs,
                     paymentRules.momoMaxDepositGhs,
@@ -608,6 +702,7 @@ export function WalletPage() {
                   )}
                 {paymentRules &&
                   depositMethod !== "crypto" &&
+                  depositMethod !== "binancePay" &&
                   paymentRules.momoDepositFeePct > 0 &&
                   Number(depositAmount) > 0 && (
                     <p className="mt-1 text-xs font-medium text-ink-600">
@@ -621,6 +716,35 @@ export function WalletPage() {
                       {Number(depositAmount).toFixed(2)} in your wallet
                     </p>
                   )}
+                {depositMethod === "binancePay" && paymentRules && (
+                  <>
+                    {limitsHint(
+                      paymentRules.binanceMinDepositGhs,
+                      paymentRules.binanceMaxDepositGhs,
+                      0,
+                    ) && (
+                      <p className="mt-1 text-xs text-ink-400">
+                        {limitsHint(
+                          paymentRules.binanceMinDepositGhs,
+                          paymentRules.binanceMaxDepositGhs,
+                          0,
+                        )}
+                      </p>
+                    )}
+                    {paymentRules.binanceDepositFeePct > 0 && Number(depositAmount) > 0 && (
+                      <p className="mt-1 text-xs font-medium text-ink-600">
+                        You'll pay GHS{" "}
+                        {(
+                          Number(depositAmount) *
+                          (1 + paymentRules.binanceDepositFeePct / 100)
+                        ).toFixed(2)}{" "}
+                        (GHS {Number(depositAmount).toFixed(2)} +{" "}
+                        {paymentRules.binanceDepositFeePct}% fee) and receive GHS{" "}
+                        {Number(depositAmount).toFixed(2)} in your wallet
+                      </p>
+                    )}
+                  </>
+                )}
               </div>
               <div>
                 <Label>Method</Label>
@@ -638,6 +762,9 @@ export function WalletPage() {
                     {enabledDepositMethods.crypto && (
                       <SelectItem value="crypto">USDT (Crypto)</SelectItem>
                     )}
+                    {enabledDepositMethods.binancePay && (
+                      <SelectItem value="binancePay">Binance Pay</SelectItem>
+                    )}
                     {enabledDepositMethods.chat && (
                       <SelectItem value="chat">Live Chat(Momo)</SelectItem>
                     )}
@@ -647,6 +774,13 @@ export function WalletPage() {
                   <p className="mt-1.5 text-xs text-ink-400">
                     You'll pay to our mobile money account and upload proof —
                     your wallet is credited after a quick manual review.
+                  </p>
+                )}
+                {depositMethod === "binancePay" && (
+                  <p className="mt-1.5 text-xs text-ink-400">
+                    You'll pick one of our team's Binance Pay IDs, pay there via
+                    Binance, and upload proof — your wallet is credited after a
+                    quick manual review.
                   </p>
                 )}
                 {depositMethod === "chat" && (
@@ -685,7 +819,9 @@ export function WalletPage() {
                     ? "Get deposit address"
                     : depositMethod === "chat"
                       ? "Continue in live chat"
-                      : "Get payment instructions"}
+                      : depositMethod === "binancePay"
+                        ? "Choose a Binance Pay ID"
+                        : "Get payment instructions"}
               </Button>
             </form>
           </Card>
@@ -1148,6 +1284,168 @@ export function WalletPage() {
             </form>
           </SheetContent>
         )}
+      </Sheet>
+
+      <Sheet open={!!binanceSheet} onOpenChange={(open) => !open && setBinanceSheet(null)}>
+        {binanceSheet &&
+          (() => {
+            const chosenAccount = binanceSheet.accounts.find(
+              (a) => a.id === binanceForm.accountId,
+            );
+            const feePct = paymentRules?.binanceDepositFeePct ?? 0;
+            const intended = Number(binanceSheet.amountGhs);
+            const total = Math.round(intended * (1 + feePct / 100) * 100) / 100;
+            return (
+              <SheetContent title="Complete your Binance Pay deposit">
+                <form onSubmit={handleBinanceSubmit} className="space-y-4">
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    Pay{" "}
+                    <strong>
+                      {formatCurrency(convertFromGhs(total, currency), currency)}
+                    </strong>{" "}
+                    (in USDT/BUSD at the current rate) to the Binance Pay ID
+                    below via the Binance app, using{" "}
+                    <strong>{binanceSheet.reference}</strong> as the payment
+                    reference/note if Binance allows one.
+                    {feePct > 0 && (
+                      <>
+                        {" "}
+                        This includes a {feePct}% fee; GHS{" "}
+                        {intended.toFixed(2)} will be credited to your wallet.
+                      </>
+                    )}{" "}
+                    Then fill in your details and upload your screenshot. Your
+                    wallet is credited after a quick manual review.
+                  </div>
+
+                  <div>
+                    <Label>Pay to</Label>
+                    <Select
+                      value={binanceForm.accountId}
+                      onValueChange={(v) =>
+                        setBinanceForm((f) => ({ ...f, accountId: v }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {binanceSheet.accounts.map((a) => (
+                          <SelectItem key={a.id} value={a.id}>
+                            {a.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {chosenAccount && (
+                    <Card className="divide-y divide-border p-0">
+                      <div className="flex items-center justify-between px-4 py-3 text-sm">
+                        <span className="text-ink-400">Binance Pay ID</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-ink-900">
+                            {chosenAccount.binanceId}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(chosenAccount.binanceId);
+                              toast.success("Binance Pay ID copied");
+                            }}
+                            className="grid h-6 w-6 place-items-center rounded-full text-ink-400 hover:bg-ink-100 hover:text-ink-900"
+                            aria-label="Copy Binance Pay ID"
+                          >
+                            <Copy size={13} />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between px-4 py-3 text-sm">
+                        <span className="text-ink-400">Reference</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-ink-900">
+                            {binanceSheet.reference}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(binanceSheet.reference);
+                              toast.success("Reference copied");
+                            }}
+                            className="grid h-6 w-6 place-items-center rounded-full text-ink-400 hover:bg-ink-100 hover:text-ink-900"
+                            aria-label="Copy reference"
+                          >
+                            <Copy size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    </Card>
+                  )}
+
+                  <div>
+                    <Label htmlFor="binanceSenderId">Your Binance ID</Label>
+                    <Input
+                      id="binanceSenderId"
+                      required
+                      value={binanceForm.senderBinanceId}
+                      onChange={(e) =>
+                        setBinanceForm((f) => ({ ...f, senderBinanceId: e.target.value }))
+                      }
+                      placeholder="123456789"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="binanceEmail">Your Binance email</Label>
+                    <Input
+                      id="binanceEmail"
+                      type="email"
+                      required
+                      value={binanceForm.senderEmail}
+                      onChange={(e) =>
+                        setBinanceForm((f) => ({ ...f, senderEmail: e.target.value }))
+                      }
+                      placeholder="you@example.com"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="binanceNickname">Your Binance nickname</Label>
+                    <Input
+                      id="binanceNickname"
+                      required
+                      value={binanceForm.senderName}
+                      onChange={(e) =>
+                        setBinanceForm((f) => ({ ...f, senderName: e.target.value }))
+                      }
+                      placeholder="How your name shows on Binance"
+                    />
+                  </div>
+
+                  <div>
+                    <Label>Payment screenshot</Label>
+                    <ImageUpload
+                      value={binanceForm.screenshotUrl}
+                      onChange={(url) =>
+                        setBinanceForm((f) => ({ ...f, screenshotUrl: url }))
+                      }
+                      endpoint="/api/wallet/manual-deposits/screenshot"
+                      fieldName="screenshot"
+                    />
+                  </div>
+
+                  <Button
+                    type="submit"
+                    size="lg"
+                    disabled={binanceSubmitting}
+                    className="w-full"
+                  >
+                    {binanceSubmitting ? "Submitting…" : "I've made the payment"}
+                  </Button>
+                </form>
+              </SheetContent>
+            );
+          })()}
       </Sheet>
     </div>
   );
