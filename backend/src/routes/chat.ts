@@ -1,7 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import { z } from "zod";
-import { asc, desc, eq, gt, and, count } from "drizzle-orm";
+import { asc, desc, eq, and, count } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { chatMessages, manualDeposits } from "../db/schema.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
@@ -37,22 +37,19 @@ async function getUserChatDeposits(userId: string) {
     .limit(50);
 }
 
+// Always returns the full thread (capped at 200 messages) rather than an
+// incremental slice: messages can be hard-deleted with no tombstone left
+// behind, so a partial "since last poll" fetch could never signal a removal
+// to a client that already has the deleted message loaded.
 chatRouter.get("/messages", requireAuth, async (req: AuthedRequest, res) => {
   const userId = req.user!.userId;
-  const after =
-    typeof req.query.after === "string" ? new Date(req.query.after) : null;
 
   try {
-    const conditions =
-      after && !Number.isNaN(after.getTime())
-        ? and(eq(chatMessages.userId, userId), gt(chatMessages.createdAt, after))
-        : eq(chatMessages.userId, userId);
-
     const [messages, deposits] = await Promise.all([
       db
         .select()
         .from(chatMessages)
-        .where(conditions)
+        .where(eq(chatMessages.userId, userId))
         .orderBy(asc(chatMessages.createdAt))
         .limit(200),
       getUserChatDeposits(userId),

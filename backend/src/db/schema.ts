@@ -533,6 +533,7 @@ export const chatMessages = pgTable(
     readByUser: boolean("read_by_user").notNull().default(false),
     readByAdmin: boolean("read_by_admin").notNull().default(false),
     createdAt: timestamp("created_at").notNull().defaultNow(),
+    editedAt: timestamp("edited_at"),
   },
   (t) => ({
     userCreatedIdx: index("chat_messages_user_created_idx").on(

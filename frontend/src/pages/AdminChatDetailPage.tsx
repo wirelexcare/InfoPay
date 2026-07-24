@@ -3,10 +3,13 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   BadgeCheck,
+  Check,
   ExternalLink,
   Loader2,
   Paperclip,
+  Pencil,
   Send,
+  Trash2,
   Wallet,
   X,
   XCircle,
@@ -15,6 +18,7 @@ import { toast } from "sonner";
 import { api } from "../lib/api";
 import {
   formatChatTime,
+  ImageLightbox,
   type ChatDeposit,
   type ChatMessage,
 } from "./ChatPage";
@@ -44,6 +48,7 @@ export function AdminChatDetailPage() {
   const [sending, setSending] = useState(false);
   const [attachedImageUrl, setAttachedImageUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   // Deposit review state
   const [actingDepositId, setActingDepositId] = useState<string | null>(null);
@@ -56,7 +61,15 @@ export function AdminChatDetailPage() {
   const [creditReason, setCreditReason] = useState("");
   const [crediting, setCrediting] = useState(false);
 
-  const lastTsRef = useRef<string | null>(null);
+  // Editing state for admin's inline edit-in-place
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+
+  // Tracks which message ids we've already rendered, purely to detect newly
+  // arrived messages (for scroll/mark-read) -- the message list itself is
+  // always replaced wholesale from the server response (see absorb below),
+  // since a hard-deleted message leaves no tombstone to diff against.
   const seenIdsRef = useRef<Set<string>>(new Set());
   const inFlightRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -70,23 +83,18 @@ export function AdminChatDetailPage() {
 
   function absorb(incoming: ChatMessage[], depositList: ChatDeposit[]) {
     setDeposits(Object.fromEntries(depositList.map((d) => [d.id, d])));
-    const fresh = incoming.filter((m) => !seenIdsRef.current.has(m.id));
-    if (fresh.length === 0) return false;
-    for (const m of fresh) seenIdsRef.current.add(m.id);
-    const newest = fresh[fresh.length - 1];
-    if (!lastTsRef.current || newest.createdAt > lastTsRef.current) {
-      lastTsRef.current = newest.createdAt;
-    }
-    setMessages((prev) => [...prev, ...fresh]);
-    return true;
+    const newOnes = incoming.filter((m) => !seenIdsRef.current.has(m.id));
+    seenIdsRef.current = new Set(incoming.map((m) => m.id));
+    setMessages(incoming);
+    return newOnes;
   }
 
   async function refetchAll() {
     // Full refetch after deposit actions so status flips + system messages arrive
     try {
       const { data } = await api.get(`/api/admin/chats/${userId}/messages`);
-      const hadNew = absorb(data.messages, data.deposits);
-      if (hadNew) scrollToBottom();
+      const newOnes = absorb(data.messages, data.deposits);
+      if (newOnes.length > 0) scrollToBottom();
     } catch {
       // next poll will catch up
     }
@@ -101,15 +109,12 @@ export function AdminChatDetailPage() {
       if (!initial && document.visibilityState === "hidden") return;
       inFlightRef.current = true;
       try {
-        const params = lastTsRef.current ? { after: lastTsRef.current } : undefined;
-        const { data } = await api.get(`/api/admin/chats/${userId}/messages`, { params });
+        const { data } = await api.get(`/api/admin/chats/${userId}/messages`);
         if (cancelled) return;
         if (data.user) setChatUser(data.user);
-        const hadNew = absorb(data.messages, data.deposits);
-        if (hadNew) {
-          const newUserMessages = (data.messages as ChatMessage[]).some(
-            (m) => m.senderRole === "user",
-          );
+        const newOnes = absorb(data.messages, data.deposits);
+        if (newOnes.length > 0) {
+          const newUserMessages = newOnes.some((m) => m.senderRole === "user");
           if (newUserMessages) {
             api.post(`/api/admin/chats/${userId}/read`).catch(() => {});
           }
@@ -175,13 +180,10 @@ export function AdminChatDetailPage() {
         ...(attachedImageUrl ? { imageUrl: attachedImageUrl } : {}),
       });
       const msg: ChatMessage = data.message;
-      if (!seenIdsRef.current.has(msg.id)) {
-        seenIdsRef.current.add(msg.id);
-        if (!lastTsRef.current || msg.createdAt > lastTsRef.current) {
-          lastTsRef.current = msg.createdAt;
-        }
-        setMessages((prev) => [...prev, msg]);
-      }
+      seenIdsRef.current.add(msg.id);
+      setMessages((prev) =>
+        prev.some((m) => m.id === msg.id) ? prev : [...prev, msg],
+      );
       setInput("");
       setAttachedImageUrl(null);
       scrollToBottom();
@@ -189,6 +191,52 @@ export function AdminChatDetailPage() {
       toast.error(err.response?.data?.error ?? "Failed to send message");
     } finally {
       setSending(false);
+    }
+  }
+
+  function startEdit(m: ChatMessage) {
+    setEditingId(m.id);
+    setEditText(m.body ?? "");
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditText("");
+  }
+
+  async function handleSaveEdit(messageId: string) {
+    const body = editText.trim();
+    if (!body) return;
+    setEditSaving(true);
+    try {
+      const { data } = await api.patch(
+        `/api/admin/chats/${userId}/messages/${messageId}`,
+        { body },
+      );
+      const msg: ChatMessage = data.message;
+      setMessages((prev) => prev.map((m) => (m.id === msg.id ? msg : m)));
+      cancelEdit();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error ?? "Failed to edit message");
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  async function handleDeleteMessage(messageId: string) {
+    if (
+      !window.confirm(
+        "Permanently delete this message? It will be completely removed and cannot be recovered.",
+      )
+    ) {
+      return;
+    }
+    try {
+      await api.delete(`/api/admin/chats/${userId}/messages/${messageId}`);
+      seenIdsRef.current.delete(messageId);
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+    } catch (err: any) {
+      toast.error(err.response?.data?.error ?? "Failed to delete message");
     }
   }
 
@@ -467,38 +515,101 @@ export function AdminChatDetailPage() {
                   </div>
                 );
               }
+              const isEditing = editingId === m.id;
               return (
                 <div
                   key={m.id}
-                  className={mine ? "flex justify-end" : "flex justify-start"}
+                  className={`group flex items-end gap-1.5 ${mine ? "flex-row-reverse" : ""}`}
                 >
                   <div className="max-w-[80%]">
-                    <div
-                      className={`rounded-2xl px-3.5 py-2.5 shadow-soft ${
-                        mine
-                          ? "rounded-br-md bg-primary text-primary-foreground"
-                          : "rounded-bl-md border border-border bg-card text-ink-900"
-                      }`}
-                    >
-                      {m.imageUrl && (
-                        <a href={m.imageUrl} target="_blank" rel="noopener noreferrer">
-                          <img
-                            src={m.imageUrl}
-                            alt="Attachment"
-                            className="mb-1.5 max-h-56 w-full rounded-xl object-cover"
-                          />
-                        </a>
-                      )}
-                      {m.body && (
-                        <p className="whitespace-pre-wrap break-words text-sm">{m.body}</p>
-                      )}
-                    </div>
+                    {isEditing ? (
+                      <div className="rounded-2xl border border-primary/40 bg-card p-2 shadow-soft">
+                        <textarea
+                          value={editText}
+                          onChange={(e) => setEditText(e.target.value)}
+                          rows={2}
+                          autoFocus
+                          className="w-full resize-none rounded-lg border border-border bg-background px-2.5 py-2 text-sm outline-none focus:border-primary/40"
+                        />
+                        <div className="mt-1.5 flex justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={cancelEdit}
+                            className="grid h-7 w-7 place-items-center rounded-full text-ink-400 hover:bg-ink-100"
+                            aria-label="Cancel edit"
+                          >
+                            <X size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveEdit(m.id)}
+                            disabled={editSaving || !editText.trim()}
+                            className="grid h-7 w-7 place-items-center rounded-full bg-primary text-primary-foreground disabled:opacity-50"
+                            aria-label="Save edit"
+                          >
+                            {editSaving ? (
+                              <Loader2 size={13} className="animate-spin" />
+                            ) : (
+                              <Check size={13} />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        className={`rounded-2xl px-3.5 py-2.5 shadow-soft ${
+                          mine
+                            ? "rounded-br-md bg-primary text-primary-foreground"
+                            : "rounded-bl-md border border-border bg-card text-ink-900"
+                        }`}
+                      >
+                        {m.imageUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setLightboxUrl(m.imageUrl)}
+                            className="block"
+                          >
+                            <img
+                              src={m.imageUrl}
+                              alt="Attachment"
+                              className="mb-1.5 max-h-56 w-full rounded-xl object-cover"
+                            />
+                          </button>
+                        )}
+                        {m.body && (
+                          <p className="whitespace-pre-wrap break-words text-sm">{m.body}</p>
+                        )}
+                      </div>
+                    )}
                     <p
                       className={`mt-1 text-[10px] text-ink-300 ${mine ? "text-right" : ""}`}
                     >
                       {formatChatTime(m.createdAt)}
+                      {m.editedAt && " · edited"}
                     </p>
                   </div>
+                  {!isEditing && (
+                    <div className="mb-4 flex gap-0.5 opacity-0 transition group-hover:opacity-100">
+                      {m.body && !m.manualDepositId && (
+                        <button
+                          type="button"
+                          onClick={() => startEdit(m)}
+                          className="grid h-6 w-6 place-items-center rounded-full text-ink-400 hover:bg-ink-100 hover:text-ink-700"
+                          aria-label="Edit message"
+                        >
+                          <Pencil size={12} />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteMessage(m.id)}
+                        className="grid h-6 w-6 place-items-center rounded-full text-ink-400 hover:bg-red-50 hover:text-red-600"
+                        aria-label="Delete message"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })
@@ -680,6 +791,8 @@ export function AdminChatDetailPage() {
           </form>
         </div>
       )}
+
+      <ImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
     </div>
   );
 }

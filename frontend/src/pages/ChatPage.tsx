@@ -13,6 +13,40 @@ export interface ChatMessage {
   imageUrl: string | null;
   manualDepositId: string | null;
   createdAt: string;
+  editedAt: string | null;
+}
+
+// Full-screen preview for chat image attachments, in place of opening the
+// image in a new tab.
+export function ImageLightbox({
+  url,
+  onClose,
+}: {
+  url: string | null;
+  onClose: () => void;
+}) {
+  if (!url) return null;
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4"
+      onClick={onClose}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+        aria-label="Close preview"
+      >
+        <X size={18} />
+      </button>
+      <img
+        src={url}
+        alt="Attachment preview"
+        onClick={(e) => e.stopPropagation()}
+        className="max-h-full max-w-full rounded-lg object-contain"
+      />
+    </div>
+  );
 }
 
 export interface ChatDeposit {
@@ -93,8 +127,12 @@ export function ChatPage() {
   const [sending, setSending] = useState(false);
   const [attachedImageUrl, setAttachedImageUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
-  const lastTsRef = useRef<string | null>(null);
+  // Tracks which message ids we've already rendered, purely to detect newly
+  // arrived messages (for scroll/mark-read) -- the message list itself is
+  // always replaced wholesale from the server response (see absorb below),
+  // since a hard-deleted message leaves no tombstone to diff against.
   const seenIdsRef = useRef<Set<string>>(new Set());
   const inFlightRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -102,15 +140,10 @@ export function ChatPage() {
 
   function absorb(incoming: ChatMessage[], depositList: ChatDeposit[]) {
     setDeposits(Object.fromEntries(depositList.map((d) => [d.id, d])));
-    const fresh = incoming.filter((m) => !seenIdsRef.current.has(m.id));
-    if (fresh.length === 0) return false;
-    for (const m of fresh) seenIdsRef.current.add(m.id);
-    const newest = fresh[fresh.length - 1];
-    if (!lastTsRef.current || newest.createdAt > lastTsRef.current) {
-      lastTsRef.current = newest.createdAt;
-    }
-    setMessages((prev) => [...prev, ...fresh]);
-    return true;
+    const newOnes = incoming.filter((m) => !seenIdsRef.current.has(m.id));
+    seenIdsRef.current = new Set(incoming.map((m) => m.id));
+    setMessages(incoming);
+    return newOnes;
   }
 
   function scrollToBottom() {
@@ -127,15 +160,12 @@ export function ChatPage() {
       if (!initial && document.visibilityState === "hidden") return;
       inFlightRef.current = true;
       try {
-        const params = lastTsRef.current ? { after: lastTsRef.current } : undefined;
-        const { data } = await api.get("/api/chat/messages", { params });
+        const { data } = await api.get("/api/chat/messages");
         if (cancelled) return;
-        const hadNew = absorb(data.messages, data.deposits);
-        if (hadNew) {
+        const newOnes = absorb(data.messages, data.deposits);
+        if (newOnes.length > 0) {
           // Something arrived from the other side: mark thread read
-          const unseenFromOthers = (data.messages as ChatMessage[]).some(
-            (m) => m.senderRole !== "user",
-          );
+          const unseenFromOthers = newOnes.some((m) => m.senderRole !== "user");
           if (unseenFromOthers) {
             api.post("/api/chat/read").catch(() => {});
           }
@@ -199,13 +229,10 @@ export function ChatPage() {
         ...(attachedImageUrl ? { imageUrl: attachedImageUrl } : {}),
       });
       const msg: ChatMessage = data.message;
-      if (!seenIdsRef.current.has(msg.id)) {
-        seenIdsRef.current.add(msg.id);
-        if (!lastTsRef.current || msg.createdAt > lastTsRef.current) {
-          lastTsRef.current = msg.createdAt;
-        }
-        setMessages((prev) => [...prev, msg]);
-      }
+      seenIdsRef.current.add(msg.id);
+      setMessages((prev) =>
+        prev.some((m) => m.id === msg.id) ? prev : [...prev, msg],
+      );
       setInput("");
       setAttachedImageUrl(null);
       scrollToBottom();
@@ -277,13 +304,17 @@ export function ChatPage() {
                     }`}
                   >
                     {m.imageUrl && (
-                      <a href={m.imageUrl} target="_blank" rel="noopener noreferrer">
+                      <button
+                        type="button"
+                        onClick={() => setLightboxUrl(m.imageUrl)}
+                        className="block"
+                      >
                         <img
                           src={m.imageUrl}
                           alt="Attachment"
                           className="mb-1.5 max-h-56 w-full rounded-xl object-cover"
                         />
-                      </a>
+                      </button>
                     )}
                     {m.body && (
                       <p className="whitespace-pre-wrap break-words text-sm">{m.body}</p>
@@ -293,6 +324,7 @@ export function ChatPage() {
                     className={`mt-1 text-[10px] text-ink-300 ${mine ? "text-right" : ""}`}
                   >
                     {formatChatTime(m.createdAt)}
+                    {m.editedAt && " · edited"}
                   </p>
                 </div>
               </div>
@@ -372,6 +404,8 @@ export function ChatPage() {
           </form>
         </div>
       </div>
+
+      <ImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
     </div>
   );
 }

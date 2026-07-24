@@ -2547,25 +2547,22 @@ adminRouter.get(
   },
 );
 
+// Always returns the full thread (capped at 200 messages) rather than an
+// incremental slice: messages can be hard-deleted with no tombstone left
+// behind, so a partial "since last poll" fetch could never signal a removal
+// to a client that already has the deleted message loaded.
 adminRouter.get(
   "/chats/:userId/messages",
   requirePermission("chats.manage"),
   async (req: AuthedRequest, res) => {
     try {
       const { userId } = req.params;
-      const after =
-        typeof req.query.after === "string" ? new Date(req.query.after) : null;
-
-      const conditions =
-        after && !Number.isNaN(after.getTime())
-          ? and(eq(chatMessages.userId, userId), gt(chatMessages.createdAt, after))
-          : eq(chatMessages.userId, userId);
 
       const [messages, deposits, [user]] = await Promise.all([
         db
           .select()
           .from(chatMessages)
-          .where(conditions)
+          .where(eq(chatMessages.userId, userId))
           .orderBy(asc(chatMessages.createdAt))
           .limit(200),
         getChatDepositsForUser(userId),
@@ -2645,6 +2642,93 @@ adminRouter.post(
     } catch (error) {
       console.error("Error sending chat message:", error);
       res.status(500).json({ error: "Failed to send message" });
+    }
+  },
+);
+
+const editMessageSchema = z.object({
+  body: z.string().trim().min(1).max(2000),
+});
+
+adminRouter.patch(
+  "/chats/:userId/messages/:messageId",
+  requirePermission("chats.manage"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const { userId, messageId } = req.params;
+      const parsed = editMessageSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+      }
+
+      const [existing] = await db
+        .select()
+        .from(chatMessages)
+        .where(and(eq(chatMessages.id, messageId), eq(chatMessages.userId, userId)))
+        .limit(1);
+      if (!existing) {
+        return res.status(404).json({ error: "Message not found" });
+      }
+      if (existing.manualDepositId) {
+        return res.status(400).json({ error: "Cannot edit a top-up request card" });
+      }
+
+      const [message] = await db
+        .update(chatMessages)
+        .set({ body: parsed.data.body, editedAt: new Date() })
+        .where(eq(chatMessages.id, messageId))
+        .returning();
+
+      await logAdminAction(
+        req.user!.userId,
+        "CHAT_MESSAGE_EDITED",
+        "chat_messages",
+        messageId,
+        { targetUserId: userId, previousBody: existing.body, newBody: parsed.data.body },
+      );
+
+      res.json({ message });
+    } catch (error) {
+      console.error("Error editing chat message:", error);
+      res.status(500).json({ error: "Failed to edit message" });
+    }
+  },
+);
+
+adminRouter.delete(
+  "/chats/:userId/messages/:messageId",
+  requirePermission("chats.manage"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const { userId, messageId } = req.params;
+
+      const [existing] = await db
+        .select()
+        .from(chatMessages)
+        .where(and(eq(chatMessages.id, messageId), eq(chatMessages.userId, userId)))
+        .limit(1);
+      if (!existing) {
+        return res.status(404).json({ error: "Message not found" });
+      }
+      if (existing.manualDepositId) {
+        return res.status(400).json({ error: "Cannot delete a top-up request card" });
+      }
+
+      // Hard delete: the row is permanently removed, nothing is kept.
+      await db.delete(chatMessages).where(eq(chatMessages.id, messageId));
+
+      await logAdminAction(
+        req.user!.userId,
+        "CHAT_MESSAGE_DELETED",
+        "chat_messages",
+        messageId,
+        { targetUserId: userId, body: existing.body, imageUrl: existing.imageUrl },
+      );
+
+      res.json({ success: true, messageId });
+    } catch (error) {
+      console.error("Error deleting chat message:", error);
+      res.status(500).json({ error: "Failed to delete message" });
     }
   },
 );
