@@ -282,7 +282,7 @@ Key tables:
 
 ### Payment Integration
 - **Paystack**: Credit/debit card payments
-- **Binance Pay**: USDT crypto
+- **NOWPayments**: USDT TRC20 crypto
 - **Manual**: Bank transfers & Mobile Money with admin verification
 - **Webhook**: Handles payment confirmations
 

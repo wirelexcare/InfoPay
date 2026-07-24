@@ -1,5 +1,5 @@
 import "dotenv/config";
-import express, { type Request } from "express";
+import express from "express";
 import cors from "cors";
 import { authRouter } from "./routes/auth.js";
 import { kycRouter } from "./routes/kyc.js";
@@ -32,20 +32,7 @@ app.use(
     credentials: true,
   }),
 );
-// Keep the raw request bytes alongside the parsed body so webhook handlers
-// (Binance Pay) can verify HMAC signatures against the exact payload that
-// was signed — re-serializing the parsed JSON can reorder keys/whitespace
-// and silently break signature verification.
-export interface RequestWithRawBody extends Request {
-  rawBody?: string;
-}
-app.use(
-  express.json({
-    verify: (req: RequestWithRawBody, _res, buf) => {
-      req.rawBody = buf.toString("utf8");
-    },
-  }),
-);
+app.use(express.json());
 
 app.get(["/health", "/api/health"], (_req, res) => {
   res.json({ status: "ok" });

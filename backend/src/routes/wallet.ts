@@ -23,7 +23,7 @@ import {
   validateBankAccountName,
   getGhanaBanks,
 } from "../lib/moolre.js";
-import { CRYPTO_MIN_WITHDRAW_USD } from "../lib/binance.js";
+import { CRYPTO_MIN_WITHDRAW_USD } from "../lib/nowpayments.js";
 import { getGhsPerUsd } from "../lib/fx.js";
 import { generateDepositReference } from "../lib/manualDeposits.js";
 import { uploadPaymentScreenshot } from "../lib/storage.js";
@@ -437,14 +437,14 @@ walletRouter.post(
     }
 
     const rules = await getPaymentRules();
-    if (rules.minDepositGhs !== null && amountGhs < rules.minDepositGhs) {
+    if (rules.momoMinDepositGhs !== null && amountGhs < rules.momoMinDepositGhs) {
       return res.status(400).json({
-        error: `Minimum deposit is GHS ${rules.minDepositGhs.toFixed(2)}`,
+        error: `Minimum deposit is GHS ${rules.momoMinDepositGhs.toFixed(2)}`,
       });
     }
-    if (rules.maxDepositGhs !== null && amountGhs > rules.maxDepositGhs) {
+    if (rules.momoMaxDepositGhs !== null && amountGhs > rules.momoMaxDepositGhs) {
       return res.status(400).json({
-        error: `Maximum deposit is GHS ${rules.maxDepositGhs.toFixed(2)}`,
+        error: `Maximum deposit is GHS ${rules.momoMaxDepositGhs.toFixed(2)}`,
       });
     }
 

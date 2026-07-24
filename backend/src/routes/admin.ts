@@ -1818,13 +1818,18 @@ adminRouter.get("/manual-deposits/:depositId", requirePermission("deposits.manag
 
     // The user paid intended + fee (fee is charged on top), so show reviewers
     // the exact figure to expect on the payment screenshot.
-    const { depositFeePct } = await getPaymentRules();
+    const { momoDepositFeePct } = await getPaymentRules();
     const intended = Number(deposit.amountGhs);
     const expectedPaymentGhs =
-      Math.round(intended * (1 + depositFeePct / 100) * 100) / 100;
+      Math.round(intended * (1 + momoDepositFeePct / 100) * 100) / 100;
 
     res.json({
-      data: { ...deposit, user, depositFeePct, expectedPaymentGhs },
+      data: {
+        ...deposit,
+        user,
+        depositFeePct: momoDepositFeePct,
+        expectedPaymentGhs,
+      },
     });
   } catch (error) {
     console.error("Error fetching manual deposit:", error);
@@ -2701,11 +2706,13 @@ const nullableTime = z.preprocess(
 
 const paymentSettingsInputSchema = z
   .object({
-    minDepositGhs: nullableAmount.optional().default(null),
-    maxDepositGhs: nullableAmount.optional().default(null),
+    momoMinDepositGhs: nullableAmount.optional().default(null),
+    momoMaxDepositGhs: nullableAmount.optional().default(null),
+    momoDepositFeePct: z.coerce.number().min(0).max(100).optional().default(0),
+    cryptoMinDepositGhs: nullableAmount.optional().default(null),
+    cryptoMaxDepositGhs: nullableAmount.optional().default(null),
     minWithdrawalGhs: nullableAmount.optional().default(null),
     maxWithdrawalGhs: nullableAmount.optional().default(null),
-    depositFeePct: z.coerce.number().min(0).max(100).optional().default(0),
     withdrawalFeePct: z.coerce.number().min(0).max(100).optional().default(0),
     withdrawalDays: z
       .array(z.coerce.number().int().min(0).max(6))
@@ -2717,8 +2724,17 @@ const paymentSettingsInputSchema = z
   })
   .refine(
     (d) =>
-      d.minDepositGhs == null || d.maxDepositGhs == null || d.maxDepositGhs >= d.minDepositGhs,
+      d.momoMinDepositGhs == null ||
+      d.momoMaxDepositGhs == null ||
+      d.momoMaxDepositGhs >= d.momoMinDepositGhs,
     { message: "Maximum deposit must be at least the minimum deposit" },
+  )
+  .refine(
+    (d) =>
+      d.cryptoMinDepositGhs == null ||
+      d.cryptoMaxDepositGhs == null ||
+      d.cryptoMaxDepositGhs >= d.cryptoMinDepositGhs,
+    { message: "Maximum crypto deposit must be at least the minimum crypto deposit" },
   )
   .refine(
     (d) =>
@@ -2739,11 +2755,13 @@ adminRouter.get(
       const [row] = await db.select().from(paymentSettings).limit(1);
       res.json({
         data: row ?? {
-          minDepositGhs: null,
-          maxDepositGhs: null,
+          momoMinDepositGhs: null,
+          momoMaxDepositGhs: null,
+          momoDepositFeePct: "0",
+          cryptoMinDepositGhs: null,
+          cryptoMaxDepositGhs: null,
           minWithdrawalGhs: null,
           maxWithdrawalGhs: null,
-          depositFeePct: "0",
           withdrawalFeePct: "0",
           withdrawalDays: [],
           withdrawalStartTime: null,
@@ -2768,11 +2786,13 @@ adminRouter.put(
       }
       const d = parsed.data;
       const values = {
-        minDepositGhs: d.minDepositGhs?.toFixed(2) ?? null,
-        maxDepositGhs: d.maxDepositGhs?.toFixed(2) ?? null,
+        momoMinDepositGhs: d.momoMinDepositGhs?.toFixed(2) ?? null,
+        momoMaxDepositGhs: d.momoMaxDepositGhs?.toFixed(2) ?? null,
+        momoDepositFeePct: d.momoDepositFeePct.toFixed(2),
+        cryptoMinDepositGhs: d.cryptoMinDepositGhs?.toFixed(2) ?? null,
+        cryptoMaxDepositGhs: d.cryptoMaxDepositGhs?.toFixed(2) ?? null,
         minWithdrawalGhs: d.minWithdrawalGhs?.toFixed(2) ?? null,
         maxWithdrawalGhs: d.maxWithdrawalGhs?.toFixed(2) ?? null,
-        depositFeePct: d.depositFeePct.toFixed(2),
         withdrawalFeePct: d.withdrawalFeePct.toFixed(2),
         withdrawalDays: [...new Set(d.withdrawalDays)].sort((a, b) => a - b),
         withdrawalStartTime: d.withdrawalStartTime,

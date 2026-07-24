@@ -218,7 +218,7 @@ export function WalletPage() {
   const [depositAmount, setDepositAmount] = useState("");
   const [depositMethod, setDepositMethod] = useState<
     "momo" | "bank" | "crypto" | "chat"
-  >("momo");
+  >("chat");
   // Contact number sent along with a live-chat top-up request
   const [depositPhone, setDepositPhone] = useState(user?.phone ?? "");
   const [depositLoading, setDepositLoading] = useState(false);
@@ -245,7 +245,7 @@ export function WalletPage() {
 
   // Keep the selected method valid when the admin has hidden it.
   useEffect(() => {
-    const order: ("momo" | "crypto" | "chat")[] = ["momo", "crypto", "chat"];
+    const order: ("momo" | "crypto" | "chat")[] = ["chat", "momo", "crypto"];
     if (
       depositMethod !== "bank" &&
       !enabledDepositMethods[depositMethod as "momo" | "crypto" | "chat"]
@@ -262,11 +262,13 @@ export function WalletPage() {
 
   // Platform-wide limits, fees, and withdrawal windows set by the admin.
   const [paymentRules, setPaymentRules] = useState<{
-    minDepositGhs: number | null;
-    maxDepositGhs: number | null;
+    momoMinDepositGhs: number | null;
+    momoMaxDepositGhs: number | null;
+    momoDepositFeePct: number;
+    cryptoMinDepositGhs: number | null;
+    cryptoMaxDepositGhs: number | null;
     minWithdrawalGhs: number | null;
     maxWithdrawalGhs: number | null;
-    depositFeePct: number;
     withdrawalFeePct: number;
     withdrawalOpenNow: boolean;
     withdrawalClosedReason: string | null;
@@ -288,17 +290,34 @@ export function WalletPage() {
   }
 
   // Every deposit path (momo, crypto, and the chat-assisted request) must
-  // respect the same admin-configured min/max — the chat path in particular
-  // just posts free text with no server-side amount check, so this is the
-  // only thing stopping an out-of-range top-up request from being submitted.
-  function validateDepositAmount(amount: number): string | null {
+  // respect the admin-configured min/max for that method — the chat path in
+  // particular just posts free text with no server-side amount check, so
+  // this is the only thing stopping an out-of-range top-up request from
+  // being submitted.
+  function validateDepositAmount(
+    amount: number,
+    method: "momo" | "bank" | "crypto" | "chat",
+  ): string | null {
     if (!(amount > 0)) return "Enter a valid amount";
     if (!paymentRules) return null;
-    if (paymentRules.minDepositGhs !== null && amount < paymentRules.minDepositGhs) {
-      return `Minimum deposit is GHS ${paymentRules.minDepositGhs.toFixed(2)}`;
+
+    if (method === "crypto") {
+      const min = paymentRules.cryptoMinDepositGhs ?? cryptoQuote?.minDepositGhs ?? null;
+      const max = paymentRules.cryptoMaxDepositGhs;
+      if (min !== null && amount < min) {
+        return `Minimum deposit is GHS ${min.toFixed(2)}`;
+      }
+      if (max !== null && amount > max) {
+        return `Maximum deposit is GHS ${max.toFixed(2)}`;
+      }
+      return null;
     }
-    if (paymentRules.maxDepositGhs !== null && amount > paymentRules.maxDepositGhs) {
-      return `Maximum deposit is GHS ${paymentRules.maxDepositGhs.toFixed(2)}`;
+
+    if (paymentRules.momoMinDepositGhs !== null && amount < paymentRules.momoMinDepositGhs) {
+      return `Minimum deposit is GHS ${paymentRules.momoMinDepositGhs.toFixed(2)}`;
+    }
+    if (paymentRules.momoMaxDepositGhs !== null && amount > paymentRules.momoMaxDepositGhs) {
+      return `Maximum deposit is GHS ${paymentRules.momoMaxDepositGhs.toFixed(2)}`;
     }
     return null;
   }
@@ -313,10 +332,9 @@ export function WalletPage() {
   const [selectedTx, setSelectedTx] = useState<WalletTransaction | null>(null);
 
   const [cryptoInvoice, setCryptoInvoice] = useState<{
+    payAddress: string;
     payAmount: string;
     payCurrency: string;
-    checkoutUrl?: string;
-    qrcodeLink?: string;
   } | null>(null);
 
   const [cryptoQuote, setCryptoQuote] = useState<{
@@ -326,7 +344,11 @@ export function WalletPage() {
   } | null>(null);
 
   useEffect(() => {
-    api.get("/api/payments/crypto/quote").then(({ data }) => setCryptoQuote(data));
+    const fetchQuote = () =>
+      api.get("/api/payments/crypto/quote").then(({ data }) => setCryptoQuote(data));
+    fetchQuote();
+    const interval = setInterval(fetchQuote, 60_000);
+    return () => clearInterval(interval);
   }, []);
 
   const [momoSheet, setMomoSheet] = useState<{
@@ -371,7 +393,7 @@ export function WalletPage() {
 
   async function handleDeposit(e: FormEvent) {
     e.preventDefault();
-    const validationError = validateDepositAmount(Number(depositAmount));
+    const validationError = validateDepositAmount(Number(depositAmount), depositMethod);
     if (validationError) {
       toast.error(validationError);
       return;
@@ -383,10 +405,9 @@ export function WalletPage() {
           amountGhs: depositAmount,
         });
         setCryptoInvoice({
+          payAddress: data.payAddress,
           payAmount: data.payAmount,
           payCurrency: data.payCurrency,
-          checkoutUrl: data.checkoutUrl,
-          qrcodeLink: data.qrcodeLink,
         });
         setDepositAmount("");
       } else if (depositMethod === "chat") {
@@ -453,10 +474,10 @@ export function WalletPage() {
     }
   }
 
-  async function copyCheckoutLink() {
-    if (!cryptoInvoice?.checkoutUrl) return;
-    await navigator.clipboard.writeText(cryptoInvoice.checkoutUrl);
-    toast.success("Link copied");
+  async function copyAddress() {
+    if (!cryptoInvoice) return;
+    await navigator.clipboard.writeText(cryptoInvoice.payAddress);
+    toast.success("Address copied");
   }
 
   async function handleWithdraw(e: FormEvent) {
@@ -541,42 +562,62 @@ export function WalletPage() {
                   placeholder="500"
                 />
                 {depositMethod === "crypto" && cryptoQuote && (
-                  <p className="mt-1 text-xs text-ink-400">
-                    1 USD ≈ GHS {cryptoQuote.ghsPerUsd.toFixed(2)}
+                  <>
+                    <p className="mt-1 text-xs text-ink-400">
+                      1 USD ≈ GHS {cryptoQuote.ghsPerUsd.toFixed(2)}
+                      {cryptoQuote.minDepositGhs !== null && (
+                        <>
+                          {" "}
+                          · Minimum deposit: GHS{" "}
+                          {cryptoQuote.minDepositGhs.toFixed(2)}
+                        </>
+                      )}
+                      {paymentRules?.cryptoMaxDepositGhs != null && (
+                        <>
+                          {" "}
+                          · Maximum deposit: GHS{" "}
+                          {paymentRules.cryptoMaxDepositGhs.toFixed(2)}
+                        </>
+                      )}
+                    </p>
                     {cryptoQuote.minDepositGhs !== null && (
-                      <>
-                        {" "}
-                        · Minimum deposit: GHS{" "}
-                        {cryptoQuote.minDepositGhs.toFixed(2)}
-                      </>
+                      <p className="mt-0.5 text-xs text-ink-400">
+                        This minimum changes with the crypto market and updates
+                        automatically while you're on this page.
+                      </p>
                     )}
-                  </p>
+                    <p className="mt-0.5 text-xs font-medium text-ink-600">
+                      No deposit fee for crypto top-ups.
+                    </p>
+                  </>
                 )}
                 {paymentRules &&
+                  depositMethod !== "crypto" &&
                   limitsHint(
-                    paymentRules.minDepositGhs,
-                    paymentRules.maxDepositGhs,
+                    paymentRules.momoMinDepositGhs,
+                    paymentRules.momoMaxDepositGhs,
                     0,
                   ) && (
                     <p className="mt-1 text-xs text-ink-400">
                       {limitsHint(
-                        paymentRules.minDepositGhs,
-                        paymentRules.maxDepositGhs,
+                        paymentRules.momoMinDepositGhs,
+                        paymentRules.momoMaxDepositGhs,
                         0,
                       )}
                     </p>
                   )}
                 {paymentRules &&
-                  paymentRules.depositFeePct > 0 &&
+                  depositMethod !== "crypto" &&
+                  paymentRules.momoDepositFeePct > 0 &&
                   Number(depositAmount) > 0 && (
                     <p className="mt-1 text-xs font-medium text-ink-600">
                       You'll pay GHS{" "}
                       {(
                         Number(depositAmount) *
-                        (1 + paymentRules.depositFeePct / 100)
+                        (1 + paymentRules.momoDepositFeePct / 100)
                       ).toFixed(2)}{" "}
                       (GHS {Number(depositAmount).toFixed(2)} +{" "}
-                      {paymentRules.depositFeePct}% fee) and receive GHS{" "}
+                      {paymentRules.momoDepositFeePct}% fee) and receive GHS{" "}
                       {Number(depositAmount).toFixed(2)} in your wallet
                     </p>
                   )}
@@ -598,7 +639,7 @@ export function WalletPage() {
                       <SelectItem value="crypto">USDT (Crypto)</SelectItem>
                     )}
                     {enabledDepositMethods.chat && (
-                      <SelectItem value="chat">Live Chat</SelectItem>
+                      <SelectItem value="chat">Live Chat(Momo)</SelectItem>
                     )}
                   </SelectContent>
                 </Select>
@@ -923,60 +964,42 @@ export function WalletPage() {
 
       <Sheet open={!!cryptoInvoice} onOpenChange={(open) => !open && setCryptoInvoice(null)}>
         {cryptoInvoice && (
-          <SheetContent title="Complete your deposit with Binance Pay">
+          <SheetContent title="Send USDT to complete deposit">
             <div className="space-y-4">
               <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                Pay with Binance Pay to complete this deposit. Your wallet is
-                credited automatically once the payment confirms — no need to
-                stay on this screen.
+                Send exactly the amount below on the <strong>TRC20</strong>{" "}
+                network. Your wallet is credited automatically once the
+                network confirms — no need to stay on this screen.
               </div>
 
               <div className="text-center">
                 <p className="text-xs font-medium uppercase tracking-wide text-ink-400">
-                  Amount to pay
+                  Amount to send
                 </p>
                 <p className="mt-1 text-2xl font-extrabold tracking-tight text-ink-900">
                   {cryptoInvoice.payAmount} {cryptoInvoice.payCurrency?.toUpperCase()}
                 </p>
               </div>
 
-              {cryptoInvoice.qrcodeLink && (
-                <div className="flex justify-center">
-                  <img
-                    src={cryptoInvoice.qrcodeLink}
-                    alt="Scan with Binance app"
-                    className="h-48 w-48 rounded-xl border border-border bg-white p-2"
-                  />
-                </div>
-              )}
-
-              {cryptoInvoice.checkoutUrl && (
+              <div>
+                <Label>Deposit address (TRC20)</Label>
                 <div className="flex items-center gap-2 rounded-xl border border-input bg-card px-4 py-3 shadow-soft">
-                  <code className="min-w-0 flex-1 truncate text-xs text-ink-900">
-                    {cryptoInvoice.checkoutUrl}
+                  <code className="min-w-0 flex-1 break-all text-xs text-ink-900">
+                    {cryptoInvoice.payAddress}
                   </code>
                   <button
                     type="button"
-                    onClick={copyCheckoutLink}
+                    onClick={copyAddress}
                     className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-400 transition hover:bg-ink-100 hover:text-ink-900 active:scale-95"
-                    aria-label="Copy checkout link"
+                    aria-label="Copy address"
                   >
                     <Copy size={15} />
                   </button>
                 </div>
-              )}
-
-              {cryptoInvoice.checkoutUrl && (
-                <Button asChild size="lg" className="w-full">
-                  <a href={cryptoInvoice.checkoutUrl} target="_blank" rel="noopener noreferrer">
-                    Open Binance Pay
-                  </a>
-                </Button>
-              )}
+              </div>
 
               <Button
                 onClick={() => setCryptoInvoice(null)}
-                variant="outline"
                 size="lg"
                 className="w-full"
               >
@@ -992,7 +1015,7 @@ export function WalletPage() {
           <SheetContent title="Complete your mobile money deposit">
             <form onSubmit={handleMomoSubmit} className="space-y-4">
               {(() => {
-                const feePct = paymentRules?.depositFeePct ?? 0;
+                const feePct = paymentRules?.momoDepositFeePct ?? 0;
                 const intended = Number(momoSheet.amountGhs);
                 const total = Math.round(intended * (1 + feePct / 100) * 100) / 100;
                 return (

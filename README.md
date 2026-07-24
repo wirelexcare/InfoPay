@@ -66,13 +66,12 @@ frontend/backend deployments:
 
 A `render.yaml` is included for Render's Blueprint deploy — it lists every
 env var the backend needs (`DATABASE_URL`, `JWT_SECRET`, `MOOLRE_*`,
-`BINANCE_PAY_*`, etc.) as `sync: false`, meaning Render will prompt you to
+`NOWPAYMENTS_*`, etc.) as `sync: false`, meaning Render will prompt you to
 fill in the actual values rather than pulling them from this repo (none of
 that is committed).
 
 After deploying, update:
-- `BINANCE_PAY_WEBHOOK_URL` to `https://<your-render-url>/api/payments/crypto/binance-webhook`,
-  and set that same URL as the webhook in the Binance Merchant portal
+- `NOWPAYMENTS_IPN_CALLBACK_URL` to `https://<your-render-url>/api/payments/crypto/ipn`
 - `FRONTEND_URL` to your Render URL (used for CORS)
 
 Local dev is unaffected — `frontend` and `backend` still run as two

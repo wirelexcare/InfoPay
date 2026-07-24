@@ -10,13 +10,12 @@ import {
 } from "../db/schema.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
 import { getPaymentRules } from "../lib/paymentSettings.js";
-import type { RequestWithRawBody } from "../app.js";
 import {
   createCryptoPayment,
   getCryptoDepositQuote,
-  verifyWebhookSignature,
+  verifyIpnSignature,
   CRYPTO_MIN_WITHDRAW_USD,
-} from "../lib/binance.js";
+} from "../lib/nowpayments.js";
 
 export const paymentsRouter = Router();
 
@@ -110,23 +109,20 @@ paymentsRouter.post(
     }
 
     const rules = await getPaymentRules();
-    if (rules.minDepositGhs !== null && amountGhs < rules.minDepositGhs) {
+    if (rules.cryptoMinDepositGhs !== null && amountGhs < rules.cryptoMinDepositGhs) {
       return res.status(400).json({
-        error: `Minimum deposit is GHS ${rules.minDepositGhs.toFixed(2)}`,
+        error: `Minimum deposit is GHS ${rules.cryptoMinDepositGhs.toFixed(2)}`,
       });
     }
-    if (rules.maxDepositGhs !== null && amountGhs > rules.maxDepositGhs) {
+    if (rules.cryptoMaxDepositGhs !== null && amountGhs > rules.cryptoMaxDepositGhs) {
       return res.status(400).json({
-        error: `Maximum deposit is GHS ${rules.maxDepositGhs.toFixed(2)}`,
+        error: `Maximum deposit is GHS ${rules.cryptoMaxDepositGhs.toFixed(2)}`,
       });
     }
 
-    // Fee is charged on top: the user pays intended + fee, and the full
-    // intended amount is what gets credited (stored in amountGhs).
-    const feeGhs = Math.round(amountGhs * (rules.depositFeePct / 100) * 100) / 100;
-    const payGhs = Math.round((amountGhs + feeGhs) * 100) / 100;
-
-    const result = await createCryptoPayment(userId, payGhs);
+    // Crypto deposits are fee-free — the full requested amount is both what
+    // the user pays and what gets credited (stored in amountGhs).
+    const result = await createCryptoPayment(userId, amountGhs);
     if (!result.ok) {
       return res.status(400).json({ error: result.error });
     }
@@ -135,7 +131,7 @@ paymentsRouter.post(
       .insert(cryptoPayments)
       .values({
         userId,
-        network: "BEP20",
+        network: "TRC20",
         asset: "USDT",
         amount: result.payAmount!,
         status: "waiting",
@@ -143,64 +139,49 @@ paymentsRouter.post(
         amountGhs: amountGhs.toFixed(2),
         payAmount: result.payAmount,
         payCurrency: result.payCurrency,
-        checkoutUrl: result.checkoutUrl,
-        qrcodeLink: result.qrcodeLink,
+        payAddress: result.payAddress,
       })
       .returning();
 
     res.status(201).json({
       paymentId: payment.id,
+      payAddress: result.payAddress,
       payAmount: result.payAmount,
       payCurrency: result.payCurrency,
-      checkoutUrl: result.checkoutUrl,
-      qrcodeLink: result.qrcodeLink,
     });
   },
 );
 
-// Binance Pay webhook. Configure this route's full URL as the merchant
-// webhook endpoint in the Binance Merchant portal.
-paymentsRouter.post("/crypto/binance-webhook", async (req: RequestWithRawBody, res) => {
-  const timestamp = req.headers["binancepay-timestamp"] as string | undefined;
-  const nonce = req.headers["binancepay-nonce"] as string | undefined;
-  const signature = req.headers["binancepay-signature"] as string | undefined;
-
-  if (!verifyWebhookSignature(req.rawBody ?? "", timestamp, nonce, signature)) {
-    return res.status(401).json({ returnCode: "FAIL", returnMessage: "Invalid signature" });
+paymentsRouter.post("/crypto/ipn", async (req, res) => {
+  const signature = req.headers["x-nowpayments-sig"] as string | undefined;
+  if (!verifyIpnSignature(req.body, signature)) {
+    return res.status(401).json({ error: "Invalid signature" });
   }
 
-  const { bizStatus, data } = req.body as {
-    bizStatus?: string;
-    data?: string;
+  const { payment_id, payment_status } = req.body as {
+    payment_id?: number | string;
+    payment_status?: string;
   };
-  const parsedData = (() => {
-    try {
-      return data ? (JSON.parse(data) as { prepayId?: string }) : null;
-    } catch {
-      return null;
-    }
-  })();
-  const prepayId = parsedData?.prepayId;
-  if (!prepayId || !bizStatus) {
-    return res.status(400).json({ returnCode: "FAIL", returnMessage: "Missing prepayId or bizStatus" });
+  if (!payment_id || !payment_status) {
+    return res.status(400).json({ error: "Missing payment_id or payment_status" });
   }
 
   const [record] = await db
     .select()
     .from(cryptoPayments)
-    .where(eq(cryptoPayments.providerPaymentId, prepayId))
+    .where(eq(cryptoPayments.providerPaymentId, String(payment_id)))
     .limit(1);
   if (!record) {
-    return res.status(404).json({ returnCode: "FAIL", returnMessage: "Payment not found" });
+    return res.status(404).json({ error: "Payment not found" });
   }
 
-  const alreadyCredited = record.status === "PAY_SUCCESS";
+  const alreadyCredited = record.status === "finished";
   await db
     .update(cryptoPayments)
-    .set({ status: bizStatus, confirmed: bizStatus === "PAY_SUCCESS" })
+    .set({ status: payment_status, confirmed: payment_status === "finished" })
     .where(eq(cryptoPayments.id, record.id));
 
-  if (bizStatus === "PAY_SUCCESS" && !alreadyCredited && record.amountGhs) {
+  if (payment_status === "finished" && !alreadyCredited && record.amountGhs) {
     // The deposit fee was already charged on top at invoice time, so the
     // stored amountGhs is exactly what the user gets credited.
     const amount = Number(record.amountGhs);
@@ -235,10 +216,10 @@ paymentsRouter.post("/crypto/binance-webhook", async (req: RequestWithRawBody, r
       balanceAfterGhs: balanceAfter.toFixed(2),
       status: "completed",
       method: "crypto",
-      reference: prepayId,
-      description: "Deposit via USDT (Binance Pay)",
+      reference: String(payment_id),
+      description: "Deposit via USDT (TRC20)",
     });
   }
 
-  res.status(200).json({ returnCode: "SUCCESS", returnMessage: null });
+  res.status(200).json({ received: true });
 });

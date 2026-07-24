@@ -2,11 +2,15 @@ import { db } from "../db/index.js";
 import { paymentSettings } from "../db/schema.js";
 
 export interface PaymentRules {
-  minDepositGhs: number | null;
-  maxDepositGhs: number | null;
+  momoMinDepositGhs: number | null;
+  momoMaxDepositGhs: number | null;
+  momoDepositFeePct: number;
+  // Crypto deposits are always fee-free; these are optional admin caps on top
+  // of the live NOWPayments minimum, which fluctuates with the crypto market.
+  cryptoMinDepositGhs: number | null;
+  cryptoMaxDepositGhs: number | null;
   minWithdrawalGhs: number | null;
   maxWithdrawalGhs: number | null;
-  depositFeePct: number;
   withdrawalFeePct: number;
   withdrawalDays: number[];
   withdrawalStartTime: string | null;
@@ -19,11 +23,13 @@ const num = (v: string | null | undefined): number | null =>
 export async function getPaymentRules(): Promise<PaymentRules> {
   const [row] = await db.select().from(paymentSettings).limit(1);
   return {
-    minDepositGhs: num(row?.minDepositGhs),
-    maxDepositGhs: num(row?.maxDepositGhs),
+    momoMinDepositGhs: num(row?.momoMinDepositGhs),
+    momoMaxDepositGhs: num(row?.momoMaxDepositGhs),
+    momoDepositFeePct: Number(row?.momoDepositFeePct ?? 0),
+    cryptoMinDepositGhs: num(row?.cryptoMinDepositGhs),
+    cryptoMaxDepositGhs: num(row?.cryptoMaxDepositGhs),
     minWithdrawalGhs: num(row?.minWithdrawalGhs),
     maxWithdrawalGhs: num(row?.maxWithdrawalGhs),
-    depositFeePct: Number(row?.depositFeePct ?? 0),
     withdrawalFeePct: Number(row?.withdrawalFeePct ?? 0),
     withdrawalDays: row?.withdrawalDays ?? [],
     withdrawalStartTime: row?.withdrawalStartTime ?? null,

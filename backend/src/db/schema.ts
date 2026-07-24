@@ -230,14 +230,12 @@ export const cryptoPayments = pgTable("crypto_payments", {
   txHash: varchar("tx_hash", { length: 255 }),
   confirmed: boolean("confirmed").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-  // Binance Pay fields (providerPaymentId stores the prepayId)
+  // NOWPayments fields
   providerPaymentId: varchar("provider_payment_id", { length: 100 }),
   amountGhs: numeric("amount_ghs", { precision: 14, scale: 2 }),
   payAmount: numeric("pay_amount", { precision: 20, scale: 8 }),
   payCurrency: varchar("pay_currency", { length: 20 }),
   payAddress: varchar("pay_address", { length: 255 }),
-  checkoutUrl: text("checkout_url"),
-  qrcodeLink: text("qrcode_link"),
   status: varchar("status", { length: 30 }).notNull().default("waiting"),
 });
 
@@ -557,13 +555,18 @@ export const supportSettings = pgTable("support_settings", {
 
 export const paymentSettings = pgTable("payment_settings", {
   id: uuid("id").primaryKey().defaultRandom(),
-  minDepositGhs: numeric("min_deposit_ghs", { precision: 14, scale: 2 }),
-  maxDepositGhs: numeric("max_deposit_ghs", { precision: 14, scale: 2 }),
-  minWithdrawalGhs: numeric("min_withdrawal_ghs", { precision: 14, scale: 2 }),
-  maxWithdrawalGhs: numeric("max_withdrawal_ghs", { precision: 14, scale: 2 }),
-  depositFeePct: numeric("deposit_fee_pct", { precision: 5, scale: 2 })
+  // Mobile money deposit limits/fee.
+  momoMinDepositGhs: numeric("min_deposit_ghs", { precision: 14, scale: 2 }),
+  momoMaxDepositGhs: numeric("max_deposit_ghs", { precision: 14, scale: 2 }),
+  momoDepositFeePct: numeric("deposit_fee_pct", { precision: 5, scale: 2 })
     .notNull()
     .default("0"),
+  // Crypto deposits are always fee-free; these are optional admin caps on top
+  // of the live NOWPayments minimum (which fluctuates with the crypto market).
+  cryptoMinDepositGhs: numeric("crypto_min_deposit_ghs", { precision: 14, scale: 2 }),
+  cryptoMaxDepositGhs: numeric("crypto_max_deposit_ghs", { precision: 14, scale: 2 }),
+  minWithdrawalGhs: numeric("min_withdrawal_ghs", { precision: 14, scale: 2 }),
+  maxWithdrawalGhs: numeric("max_withdrawal_ghs", { precision: 14, scale: 2 }),
   withdrawalFeePct: numeric("withdrawal_fee_pct", { precision: 5, scale: 2 })
     .notNull()
     .default("0"),

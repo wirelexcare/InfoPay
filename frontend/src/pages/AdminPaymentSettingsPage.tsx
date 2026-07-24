@@ -41,9 +41,11 @@ export function AdminPaymentSettingsPage() {
 
   const [minDeposit, setMinDeposit] = useState("");
   const [maxDeposit, setMaxDeposit] = useState("");
+  const [depositFee, setDepositFee] = useState("0");
+  const [cryptoMinDeposit, setCryptoMinDeposit] = useState("");
+  const [cryptoMaxDeposit, setCryptoMaxDeposit] = useState("");
   const [minWithdrawal, setMinWithdrawal] = useState("");
   const [maxWithdrawal, setMaxWithdrawal] = useState("");
-  const [depositFee, setDepositFee] = useState("0");
   const [withdrawalFee, setWithdrawalFee] = useState("0");
   const [days, setDays] = useState<number[]>([]);
   const [startTime, setStartTime] = useState("");
@@ -54,11 +56,13 @@ export function AdminPaymentSettingsPage() {
       .get("/api/admin/payment-settings")
       .then(({ data }) => {
         const d = data.data;
-        setMinDeposit(d.minDepositGhs ?? "");
-        setMaxDeposit(d.maxDepositGhs ?? "");
+        setMinDeposit(d.momoMinDepositGhs ?? "");
+        setMaxDeposit(d.momoMaxDepositGhs ?? "");
+        setDepositFee(String(Number(d.momoDepositFeePct ?? 0)));
+        setCryptoMinDeposit(d.cryptoMinDepositGhs ?? "");
+        setCryptoMaxDeposit(d.cryptoMaxDepositGhs ?? "");
         setMinWithdrawal(d.minWithdrawalGhs ?? "");
         setMaxWithdrawal(d.maxWithdrawalGhs ?? "");
-        setDepositFee(String(Number(d.depositFeePct ?? 0)));
         setWithdrawalFee(String(Number(d.withdrawalFeePct ?? 0)));
         setDays(d.withdrawalDays ?? []);
         setStartTime(d.withdrawalStartTime ?? "");
@@ -76,11 +80,13 @@ export function AdminPaymentSettingsPage() {
     try {
       setSaving(true);
       await api.put("/api/admin/payment-settings", {
-        minDepositGhs: minDeposit,
-        maxDepositGhs: maxDeposit,
+        momoMinDepositGhs: minDeposit,
+        momoMaxDepositGhs: maxDeposit,
+        momoDepositFeePct: depositFee || "0",
+        cryptoMinDepositGhs: cryptoMinDeposit,
+        cryptoMaxDepositGhs: cryptoMaxDeposit,
         minWithdrawalGhs: minWithdrawal,
         maxWithdrawalGhs: maxWithdrawal,
-        depositFeePct: depositFee || "0",
         withdrawalFeePct: withdrawalFee || "0",
         withdrawalDays: days,
         withdrawalStartTime: startTime,
@@ -123,7 +129,7 @@ export function AdminPaymentSettingsPage() {
         ) : (
           <div className="space-y-6">
             <div className="rounded-lg border border-border bg-card p-4 sm:p-6">
-              <h2 className="mb-3 font-bold text-ink-900">Deposits</h2>
+              <h2 className="mb-3 font-bold text-ink-900">Mobile Money Deposits</h2>
               <div className="grid gap-3 sm:grid-cols-3">
                 <AmountField label="Minimum (GHS)" value={minDeposit} onChange={setMinDeposit} placeholder="No minimum" />
                 <AmountField label="Maximum (GHS)" value={maxDeposit} onChange={setMaxDeposit} placeholder="No maximum" />
@@ -141,7 +147,20 @@ export function AdminPaymentSettingsPage() {
                 </div>
               </div>
               <p className="mt-2 text-xs text-ink-400">
-                The fee is deducted when a deposit is credited: a GHS 100 deposit at 2% credits GHS 98.
+                The fee is added on top of the deposit: a GHS 100 deposit at 2% requires paying GHS 102, and GHS 100 is credited to the wallet.
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-border bg-card p-4 sm:p-6">
+              <h2 className="mb-3 font-bold text-ink-900">Crypto Deposits</h2>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <AmountField label="Minimum (GHS)" value={cryptoMinDeposit} onChange={setCryptoMinDeposit} placeholder="No extra minimum" />
+                <AmountField label="Maximum (GHS)" value={cryptoMaxDeposit} onChange={setCryptoMaxDeposit} placeholder="No maximum" />
+              </div>
+              <p className="mt-2 text-xs text-ink-400">
+                Crypto deposits never carry a fee. NOWPayments also enforces its own live minimum,
+                which moves with the crypto market — these fields only add an optional extra floor/cap
+                on top of that.
               </p>
             </div>
 
